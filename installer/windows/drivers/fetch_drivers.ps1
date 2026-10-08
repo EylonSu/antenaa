@@ -31,5 +31,15 @@ function Copy-InfDir([string]$Raw, [string]$Pattern, [string]$Dest) {
     Write-Host "Placed $Dest from $($inf.Directory.FullName)"
 }
 
-Copy-InfDir (Get-Driver $Ch341Url "CH341SER") "CH341SER.INF" "CH341SER"
-Copy-InfDir (Get-Driver $FtdiUrl "FTDI") "ftdibus.inf" "FTDI"
+# A failed vendor download must not break the build; setup.iss skips missing drivers.
+foreach ($d in @(
+    @{ Url = $Ch341Url; Name = "CH341SER"; Inf = "CH341SER.INF" },
+    @{ Url = $FtdiUrl;  Name = "FTDI";     Inf = "ftdibus.inf" }
+)) {
+    try {
+        Copy-InfDir (Get-Driver $d.Url $d.Name) $d.Inf $d.Name
+    } catch {
+        Write-Warning "Skipping $($d.Name) driver: $($_.Exception.Message)"
+        if ($env:GITHUB_ACTIONS) { Write-Host "::warning::$($d.Name) driver not bundled: $($_.Exception.Message)" }
+    }
+}
