@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<script src="vendor/leaflet.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<style>
+  html, body, #map { height: 100%; margin: 0; padding: 0; background: #dde3ea; }
+  .ant-icon { font-size: 34px; line-height: 34px; text-align: center; }
+  .drone-icon { font-size: 34px; line-height: 34px; text-align: center; cursor: grab; }
+  #offline { position: absolute; top: 40%; width: 100%; text-align: center;
+             font: 20px sans-serif; color: #555; display: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="offline">Map could not load (no internet?)</div>
+<script>
+var bridge = null;
+var map = null;
+var antenna = null, drone = null, outer = null, inner = null, recLine = null, actLine = null;
+
+function icon(cls, glyph) {
+  return L.divIcon({ className: cls, html: glyph, iconSize: [34, 34], iconAnchor: [17, 17] });
+}
+
+function init() {
+  if (typeof L === "undefined") {
+    document.getElementById("offline").style.display = "block";
+    return;
+  }
+  map = L.map("map", { zoomControl: true }).setView([31.5, 34.9], 8);
+  L.tileLayer("tiles:/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+  map.on("click", function (e) {
+    if (drone && drone.options.draggable && bridge) {
+      drone.setLatLng(e.latlng);
+      bridge.droneMoved(e.latlng.lat, e.latlng.lng);
+    }
+  });
+}
+
+window.api = {
+  setAntenna: function (lat, lon, zoom) {
+    if (!map) return;
+    if (!antenna) antenna = L.marker([lat, lon], { icon: icon("ant-icon", "\uD83D\uDCE1"), zIndexOffset: 500 }).addTo(map);
+    antenna.setLatLng([lat, lon]);
+    if (zoom) map.setView([lat, lon], zoom);
+  },
+  setSector: function (outerPts, innerPts) {
+    if (!map) return;
+    if (outer) map.removeLayer(outer);
+    if (inner) map.removeLayer(inner);
+    outer = L.polygon(outerPts, { color: "#2e7d32", weight: 1, fillColor: "#66bb6a", fillOpacity: 0.15 }).addTo(map);
+    inner = L.polygon(innerPts, { color: "#1b5e20", weight: 1, fillColor: "#2e7d32", fillOpacity: 0.25 }).addTo(map);
+  },
+  setDrone: function (lat, lon, draggable) {
+    if (!map) return;
+    if (!drone) {
+      drone = L.marker([lat, lon], { icon: icon("drone-icon", "\u2708\uFE0F"), draggable: draggable, zIndexOffset: 1000 }).addTo(map);
+      drone.on("drag dragend", function () {
+        var p = drone.getLatLng();
+        if (bridge) bridge.droneMoved(p.lat, p.lng);
+      });
+    } else if (!drone.dragging || !drone.dragging._draggable || !drone.dragging._draggable._moving) {
+      drone.setLatLng([lat, lon]);
+    }
+  },
+  setRecommended: function (pts) {
+    if (!map) return;
+    if (recLine) { map.removeLayer(recLine); recLine = null; }
+    if (pts) recLine = L.polyline(pts, { color: "#1565c0", weight: 4, dashArray: "10 8" }).addTo(map);
+  },
+  setActual: function (pts) {
+    if (!map) return;
+    if (actLine) { map.removeLayer(actLine); actLine = null; }
+    if (pts) actLine = L.polyline(pts, { color: "#00c853", weight: 5 }).addTo(map);
+  }
+};
+
+init();
+if (typeof qt !== "undefined" && typeof QWebChannel !== "undefined") {
+  new QWebChannel(qt.webChannelTransport, function (channel) {
+    bridge = channel.objects.bridge;
+    bridge.mapReady();
+  });
+}
+</script>
+</body>
+</html>

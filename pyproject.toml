@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antenna-tracker"
+version = "0.1.0"
+description = "PC app for the differential antenna tracker turret"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "pyserial>=3.5",
+    "pyproj>=3.6",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+antenna-tracker = "antenna_tracker.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+antenna_tracker = ["ui/web/*.html", "ui/web/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
