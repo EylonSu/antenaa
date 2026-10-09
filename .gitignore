@@ -8,3 +8,7 @@ dist/
 .DS_Store
 installer/windows/drivers/CH341SER/
 installer/windows/drivers/FTDI/
+
+# Larger than GitHub's 100 MB file limit; kept locally only.
+samples/תקיפה 2 מחבלים_0017_20260402_165624131.mp4
+samples/תקיפה 2 מחבלים_0017_20260402_165624131 (1).mp4
