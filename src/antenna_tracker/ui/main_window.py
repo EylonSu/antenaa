@@ -21,7 +21,7 @@ from antenna_tracker.tracking.controller import AntennaSite, Mode, TrackingContr
 from antenna_tracker.ui.alerts import PowerOverlay
 from antenna_tracker.ui.gauges import CompassGauge, ElevationGauge
 from antenna_tracker.ui.manual_panel import ManualPanel
-from antenna_tracker.ui.map_view import MapView
+from antenna_tracker.ui.map_view import SECTOR_RADIUS_M, MapView
 from antenna_tracker.ui.theme import (
     ACCENT, AMBER, BORDER, GREEN, MUTED, SURFACE, TEXT, caption, card, kv_row, language_row, muted, title,
 )
@@ -43,7 +43,8 @@ GPS_BACK_STYLE = "background: #123c2b; color: #7ce8ad; border: 1px solid #286b4d
 JAM_STYLE = "background: #4b1f2a; color: #ff9daa; border: 1px solid #8b394b; border-radius: 8px;"
 QR_OK_STYLE = "font-size: 11px; font-weight: 800; color: #6ee7a4; background: #123c2b; padding: 4px 8px; border: 1px solid #286b4d; border-radius: 9px;"
 QR_BAD_STYLE = "font-size: 11px; font-weight: 800; color: #ff9daa; background: #4b1f2a; padding: 4px 8px; border: 1px solid #8b394b; border-radius: 9px;"
-ACTUAL_LINE_M = 2000.0
+# No current drone fix: stop just inside the coverage arc so the bearing is easy to read.
+NO_DRONE_LINE_M = SECTOR_RADIUS_M * 0.98
 DEFAULT_DRONE_DIST_M = 1000.0
 DEFAULT_DRONE_HEIGHT_M = 100.0
 
@@ -403,6 +404,7 @@ class MainWindow(QMainWindow):
         self.map.set_sector(p.lat, p.lon, site.ref_az_true)
         pan_tilt = self.turret.last_position or (90, 90)
         self.map.set_antenna_pose(site.ref_az_true, pan_tilt[0], pan_tilt[1])
+        self._draw_actual_line(*pan_tilt)
         self.video.set_device(cfg.video_device_id)
         self.qr_source.fields = cfg.qr_fields
         self.decoder.roi = Roi(*cfg.qr_roi)
@@ -550,8 +552,12 @@ class MainWindow(QMainWindow):
 
     def _actual_line_length_m(self, site: AntennaSite) -> float:
         pos = self.source.latest()
-        if pos is None:
-            return ACTUAL_LINE_M
+        if (
+            pos is None
+            or not self.controller.drone_gps_ok
+            or pos.age() > self.controller.stale_timeout_s
+        ):
+            return NO_DRONE_LINE_M
         _, _, dist = pointing.az_el_dist(
             site.lat, site.lon, site.alt_amsl, pos.lat, pos.lon, pos.alt_amsl)
         return dist
@@ -601,6 +607,7 @@ class MainWindow(QMainWindow):
         self.pill.setStyleSheet(
             f"background: {color}; color: {foreground}; font-size: 13px; font-weight: 800; "
             f"letter-spacing: {spacing}; border: 1px solid {color}; border-radius: 8px; padding: 7px 14px;")
+        self._draw_actual_line()
 
     def _on_mode(self, value: str) -> None:
         manual = value == Mode.MANUAL.value

@@ -10,13 +10,10 @@
 <style>
   html, body, #map { height: 100%; margin: 0; padding: 0; background: #05080e; direction: ltr; }
   .ant3d { background: none; border: none; }
-  .ant3d canvas { display: block; filter: drop-shadow(0 6px 5px rgba(0,0,0,.6)); }
+  .ant3d canvas { display: block; }
   .ant-icon { font-size: 34px; line-height: 34px; text-align: center; }
   .drone-icon { text-align: center; cursor: grab; background: none; border: none; }
-  .drone-icon img { width: 34px; height: 34px; display: block;
-    filter: drop-shadow(1px 0 0 rgba(255,255,255,.95)) drop-shadow(-1px 0 0 rgba(255,255,255,.95))
-            drop-shadow(0 1px 0 rgba(255,255,255,.95)) drop-shadow(0 -1px 0 rgba(255,255,255,.95))
-            drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+  .drone-icon img { width: 34px; height: 34px; display: block; }
   .basemap-toggle { display: flex; align-items: stretch; background: #0a111c; border: 1px solid #1d2b42;
                     border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
                     font: 600 12px/32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
@@ -27,8 +24,10 @@
   .leaflet-bar a { color: #e9eff7 !important; background: #0a111c !important; border-color: #1d2b42 !important; }
   .leaflet-control-attribution { color: #7f93ab; background: rgba(5,8,14,.85) !important; }
   .leaflet-control-attribution a { color: #46d9ff; }
-  .leaflet-tile-pane { filter: brightness(.48) saturate(.62) hue-rotate(168deg); }
-  .leaflet-overlay-pane { filter: drop-shadow(0 0 4px rgba(53,189,245,.2)); }
+  .leaflet-tile-pane { filter: none; }
+  .leaflet-container img.leaflet-tile { mix-blend-mode: normal; filter: brightness(.48) saturate(.62) hue-rotate(168deg); }
+  .leaflet-overlay-pane { filter: none; }
+  svg.leaflet-zoom-animated { will-change: auto; }
   #offline { position: absolute; top: 40%; width: 100%; text-align: center;
              font: 20px sans-serif; color: #555; display: none; }
 </style>
@@ -80,7 +79,7 @@ function buildTurret() {
   if (typeof THREE === "undefined") return null;
   var canvas = document.createElement("canvas");
   var renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true }); }
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, preserveDrawingBuffer: true }); }
   catch (e) { return null; }
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(TS, TS, false);
@@ -148,6 +147,10 @@ function turretStep() {
   t.gl.rotation.x = c.gl; t.gr.rotation.x = c.gr;
   t.renderer.render(t.scene, t.cam);
   if (busy) t.raf = requestAnimationFrame(turretStep);
+}
+function paintTurret() {
+  if (!turret) return;
+  turret.renderer.render(turret.scene, turret.cam);
 }
 function setTurretPose(refAz, az, el, pan, tilt) {
   if (!turret) return;
@@ -233,6 +236,7 @@ function init() {
   new BasemapToggle().addTo(map);
   applyBasemap(basemapFromPage(), false);
   map.on("zoomend", applyTurretScale);
+  map.on("move zoom moveend zoomend", paintTurret);
   map.on("click", function (e) {
     if (drone && drone.options.draggable && bridge) {
       drone.setLatLng(e.latlng);
