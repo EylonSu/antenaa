@@ -40,12 +40,15 @@ def test_map_html_is_packaged():
     assert "leaflet" in text and "qwebchannel.js" in text
     assert "tiles:/osm/{z}/{x}/{y}.png" in text
     assert "tiles:/satellite/{z}/{x}/{y}.jpg" in text
-    assert 'data-basemap="osm">Map' in text and 'data-basemap="satellite">Satellite' in text
+    assert 'data-basemap="osm"' in text and 'data-basemap="satellite"' in text
+    assert '"Map"' in text and '"Satellite"' in text
     assert "setBasemap" in text and "basemapChanged" in text
     assert "maxNativeZoom: 14" in text and "maxZoom: 19" in text
     assert "OpenStreetMap contributors" in text and "https://cloudless.eox.at" in text
     assert (MAP_HTML.parent / "vendor" / "leaflet.js").is_file()
     assert (MAP_HTML.parent / "vendor" / "leaflet.css").is_file()
+    assert (MAP_HTML.parent / "vendor" / "three.min.js").is_file()
+    assert "three.min.js" in text and "setAntennaPose" in text
 
 
 def test_wizard_constructs_with_fake_port(qapp, config, turret):
@@ -57,6 +60,45 @@ def test_wizard_constructs_with_fake_port(qapp, config, turret):
     assert not page.isComplete()
     assert w.location_page.isComplete()
     w.close()
+
+
+def test_alignment_reference_choice_is_visible(qapp, config, turret):
+    from PySide6.QtGui import QColor
+
+    from antenna_tracker.ui.theme import ACCENT, RAISED, app_style
+
+    previous = qapp.styleSheet()
+    qapp.setStyleSheet(app_style(False))
+    w = SetupWizard(config, turret, dev_mode=True)
+    try:
+        page = w.alignment_page
+        page_id = next(i for i in w.pageIds() if w.page(i) is page)
+        w.setCurrentId(page_id)
+        w.show()
+        qapp.processEvents()
+        map_btn = page.ref_group.button(0)
+        compass_btn = page.ref_group.button(1)
+        assert map_btn.isChecked()
+        assert "true north" in page.ref_hint.text()
+        assert _button_fill(map_btn) == QColor(ACCENT)
+        assert _button_fill(compass_btn) == QColor(RAISED)
+
+        compass_btn.click()
+        qapp.processEvents()
+        assert page.ref_group.checkedId() == 1
+        assert not map_btn.isChecked()
+        assert "magnetic north" in page.ref_hint.text()
+        assert _button_fill(compass_btn) == QColor(ACCENT)
+        assert _button_fill(map_btn) == QColor(RAISED)
+    finally:
+        w.close()
+        qapp.setStyleSheet(previous)
+
+
+def _button_fill(button):
+    """Sample inside the left edge, clear of the label and the rounded border."""
+    image = button.grab().toImage()
+    return image.pixelColor(8, image.height() // 2)
 
 
 def test_wizard_hides_fake_port_without_dev_mode(qapp, config, turret):
@@ -230,3 +272,12 @@ def test_settings_groups_declination_crop_and_setup(qapp, config):
     buttons = [button.text() for button in dlg.findChildren(QPushButton)]
     assert any(text.startswith("Run setup again") for text in buttons)
     assert "Save" in buttons and "Cancel" in buttons
+
+
+def test_position_update_sets_antenna_pose(qapp, config, turret):
+    w = MainWindow(config, turret, dev_mode=True)
+    calls = []
+    w.map._call = lambda fn, *a: calls.append((fn, a))
+    w._on_position(100, 95)
+    assert any(fn == "setAntennaPose" and a[3:] == (100, 95) for fn, a in calls)
+    w.close()

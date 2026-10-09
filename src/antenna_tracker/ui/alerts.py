@@ -3,6 +3,8 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from antenna_tracker.i18n import is_rtl, t
+
 OVERLAY_BASE = """
 QWidget#PowerOverlay { border: none; }
 QWidget#PowerOverlay QLabel { border: none; background: transparent; }
@@ -27,7 +29,7 @@ QFrame#PowerCard QPushButton {
     font-weight: 600;
     padding: 10px 22px;
 }
-QFrame#PowerCard QPushButton:hover { border-color: #8fa3bd; background: #16243a; }
+QFrame#PowerCard QPushButton:hover { border-color: #7f93ab; background: #142136; }
 QFrame#PowerCard QPushButton:pressed { background: #0b1626; }
 """
 
@@ -36,8 +38,10 @@ BADGE_LOST = BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 26); b
 BADGE_LOST_DIM = BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 12); border: 1px solid #5c2a36;"
 BADGE_OK = BADGE_BASE + "color: #6ee7a4; background: rgba(53, 208, 127, 26); border: 1px solid #286b4d;"
 
-EYEBROW_LOST = "font-size: 11px; font-weight: 800; letter-spacing: 3px; color: #ff8d99;"
-EYEBROW_OK = "font-size: 11px; font-weight: 800; letter-spacing: 3px; color: #6ee7a4;"
+def _eyebrow_style(ok: bool) -> str:
+    color = "#6ee7a4" if ok else "#ff8d99"
+    spacing = "0" if is_rtl() else "3px"
+    return f"font-size: 11px; font-weight: 800; letter-spacing: {spacing}; color: {color};"
 TITLE_STYLE = "font-size: 26px; font-weight: 700; color: #f1f5f9;"
 DETAIL_STYLE = "font-size: 14px; color: #aebdcc;"
 REASON_STYLE = "font-size: 12px; color: #6d7f94;"
@@ -53,7 +57,7 @@ class PowerOverlay(QWidget):
 
         self.badge = QLabel("\u23fb", alignment=Qt.AlignmentFlag.AlignCenter)
         self.eyebrow = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        self.eyebrow.setStyleSheet(EYEBROW_LOST)
+        self.eyebrow.setStyleSheet(_eyebrow_style(False))
         self.title = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.title.setWordWrap(True)
         self.title.setStyleSheet(TITLE_STYLE)
@@ -63,10 +67,10 @@ class PowerOverlay(QWidget):
         self.reason = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.reason.setWordWrap(True)
         self.reason.setStyleSheet(REASON_STYLE)
-        self.mute = QPushButton("Silence alarm")
+        self.mute = QPushButton(t("Silence alarm"))
         self.mute.setCursor(Qt.CursorShape.PointingHandCursor)
         self.mute.clicked.connect(self.silence)
-        self.hint = QLabel("Reconnects automatically", alignment=Qt.AlignmentFlag.AlignCenter)
+        self.hint = QLabel(t("Reconnects automatically"), alignment=Qt.AlignmentFlag.AlignCenter)
         self.hint.setStyleSheet("font-size: 12px; color: #6d7f94;")
 
         card = QFrame()
@@ -127,10 +131,10 @@ class PowerOverlay(QWidget):
         self.badge.setText("\u23fb")
         self.badge.setStyleSheet(BADGE_LOST)
         self._pulse_on = True
-        self.eyebrow.setText("POWER LOST")
-        self.eyebrow.setStyleSheet(EYEBROW_LOST)
-        self.title.setText("Tracker has no power")
-        self.detail.setText("Check the battery and power cable.\nThe app will reconnect by itself.")
+        self.eyebrow.setText(t("POWER LOST"))
+        self.eyebrow.setStyleSheet(_eyebrow_style(False))
+        self.title.setText(t("Tracker has no power"))
+        self.detail.setText(t("Check the battery and power cable.\nThe app will reconnect by itself."))
         self.reason.setText(f"({reason})" if reason else "")
         self.reason.setVisible(bool(reason))
         self.mute.show()
@@ -144,10 +148,10 @@ class PowerOverlay(QWidget):
         self.setStyleSheet(BACK_STYLE)
         self.badge.setText("\u2713")
         self.badge.setStyleSheet(BADGE_OK)
-        self.eyebrow.setText("POWER RESTORED")
-        self.eyebrow.setStyleSheet(EYEBROW_OK)
-        self.title.setText("Tracker is back")
-        self.detail.setText("Tracking resumes automatically.")
+        self.eyebrow.setText(t("POWER RESTORED"))
+        self.eyebrow.setStyleSheet(_eyebrow_style(True))
+        self.title.setText(t("Tracker is back"))
+        self.detail.setText(t("Tracking resumes automatically."))
         self.reason.setVisible(False)
         self.mute.hide()
         self.hint.hide()

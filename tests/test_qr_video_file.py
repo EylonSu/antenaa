@@ -49,7 +49,7 @@ def test_video_file_feeds_qr_source(qapp, qr_mp4, wait_until, monkeypatch):
         lost = []
         src.gps_lost.connect(lambda: lost.append(True))
         assert wait_until(lambda: src.latest() is not None, timeout=20), "no QR position decoded from the file"
-        assert win.serial_label.text() == "Drone: DRN-4521"
+        assert win.serial_label.text() == "DRN-4521"
         first = src.latest()
         assert 31.9 < first.lat < 32.3 and 34.6 < first.lon < 35.0
         assert wait_until(lambda: src.latest().t != first.t and (src.latest().lat, src.latest().lon)

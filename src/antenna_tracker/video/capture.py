@@ -15,6 +15,8 @@ from PySide6.QtMultimedia import (
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import QLabel, QStackedLayout, QWidget
 
+from antenna_tracker.i18n import t
+
 _video_file_override: str | None = None
 
 
@@ -64,7 +66,7 @@ class VideoPreview(QWidget):
             self.video = QVideoWidget()
             self._output = self.video
             self.video.videoSink().videoFrameChanged.connect(self._on_frame)
-            self.placeholder = QLabel("No video", alignment=Qt.AlignmentFlag.AlignCenter)
+            self.placeholder = QLabel(t("No video"), alignment=Qt.AlignmentFlag.AlignCenter)
             self.placeholder.setStyleSheet("background: #222; color: #aaa; font-size: 20px;")
             self._stack = QStackedLayout(self)
             self._stack.addWidget(self.placeholder)
@@ -90,7 +92,7 @@ class VideoPreview(QWidget):
         dev = find_device(dev_id)
         if dev is None:
             if self.placeholder is not None and self._stack is not None:
-                self.placeholder.setText("No video" if not dev_id else "Video device not found")
+                self.placeholder.setText(t("No video") if not dev_id else t("Video device not found"))
                 self._stack.setCurrentWidget(self.placeholder)
             return
         self._camera = QCamera(dev, self)

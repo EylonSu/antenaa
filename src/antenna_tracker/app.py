@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QProcess, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QWizard
 
 import PySide6.QtWebEngineWidgets  # noqa: F401  (must be imported before QApplication)
@@ -12,8 +14,9 @@ from antenna_tracker.config import AppConfig, load_config, save_config
 from antenna_tracker.hardware import fake_turret
 from antenna_tracker.hardware.port_finder import PortIdentity
 from antenna_tracker.hardware.turret_client import LinkState, TurretClient
+from antenna_tracker.i18n import is_rtl, set_language, t
 from antenna_tracker.ui.main_window import MainWindow
-from antenna_tracker.ui.theme import APP_STYLE
+from antenna_tracker.ui.theme import app_style
 from antenna_tracker.ui.wizard import SetupWizard
 from antenna_tracker.video.capture import set_video_file_override
 
@@ -42,6 +45,21 @@ def demo_config(config: AppConfig) -> AppConfig:
     return config
 
 
+def relaunch_command() -> tuple[str, list[str]]:
+    """Same process, so a language change picks up direction, stylesheet, and labels.
+
+    Frozen builds relaunch the executable. ``python -m antenna_tracker`` must stay a
+    module launch; a direct path to ``__main__.py`` is not a valid program on its own.
+    """
+    args = list(sys.argv[1:])
+    if getattr(sys, "frozen", False):
+        return sys.executable, args
+    invoked = sys.argv[0] if sys.argv else ""
+    if invoked in ("-m", "") or Path(invoked).name == "__main__.py":
+        return sys.executable, ["-m", "antenna_tracker", *args]
+    return sys.executable, [invoked, *args]
+
+
 class App:
     def __init__(self, config: AppConfig, dev_mode: bool) -> None:
         self.config = config
@@ -49,6 +67,8 @@ class App:
         self.turret = TurretClient()
         self.window: MainWindow | None = None
         self.wizard: SetupWizard | None = None
+        self._restarting = False
+        self._did_shutdown = False
 
     def identity(self) -> PortIdentity:
         c = self.config
@@ -59,9 +79,12 @@ class App:
             self.window.hide()
         self.wizard = SetupWizard(self.config, self.turret, self.dev_mode)
         self.wizard.finished.connect(self._wizard_done)
+        self.wizard.language_restart.connect(self.restart_in_language)
         self.wizard.show()
 
     def _wizard_done(self, result: int) -> None:
+        if self._restarting:
+            return
         if result != QWizard.DialogCode.Accepted:
             if self.window is None:
                 QApplication.quit()
@@ -77,15 +100,33 @@ class App:
         if self.window is None:
             self.window = MainWindow(self.config, self.turret, self.dev_mode)
             self.window.rerun_setup.connect(self.run_wizard)
+            self.window.language_restart.connect(self.restart_in_language)
         else:
             self.window.apply_site()
         self.window.show()
         self.window.raise_()
 
+    def restart_in_language(self, language: str) -> None:
+        """Save the language, release the turret port, then start the same command."""
+        if self._restarting:
+            return
+        self._restarting = True
+        self.config.language = "en" if language == "en" else "he"
+        save_config(self.config)
+        self.shutdown()
+        program, args = relaunch_command()
+        QProcess.startDetached(program, args)
+        QApplication.quit()
+
     def shutdown(self) -> None:
+        if self._did_shutdown:
+            return
+        self._did_shutdown = True
         if self.window is not None:
             self.window.shutdown()
         self.turret.close()
+
+ICON_PATH = Path(__file__).resolve().parent / "assets" / "icon.png"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -94,9 +135,13 @@ def main(argv: list[str] | None = None) -> int:
     set_video_file_override(args.video_file)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     qapp = QApplication(argv)
-    qapp.setApplicationName("Antenna Tracker")
-    qapp.setStyleSheet(APP_STYLE)
     config = load_config()
+    set_language(config.language)
+    qapp.setLayoutDirection(
+        Qt.LayoutDirection.RightToLeft if is_rtl() else Qt.LayoutDirection.LeftToRight)
+    qapp.setStyleSheet(app_style(is_rtl()))
+    qapp.setApplicationName("antenaa")
+    qapp.setWindowIcon(QIcon(str(ICON_PATH)))
     dev_mode = args.dev or args.demo or config.developer_mode
     app = App(demo_config(config) if args.demo else config, dev_mode)
     qapp.aboutToQuit.connect(app.shutdown)

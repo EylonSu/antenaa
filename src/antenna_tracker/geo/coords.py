@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from pyproj import Transformer
 
+from antenna_tracker.i18n import ltr, t
+
 UTM_EPSG = 32636
 ISRAEL_BBOX = (29.3, 33.5, 34.0, 36.0)  # lat_min, lat_max, lon_min, lon_max
 
@@ -24,12 +26,16 @@ class LatLon:
 
 def _six_digits(value: str, name: str) -> str:
     cleaned = value.strip()
+    label = t(name)
     if not cleaned:
-        raise UtmError(f"Please enter the {name} (6 digits).")
+        raise UtmError(t("Please enter the {name} (6 digits).").format(name=label))
     if not cleaned.isdigit():
-        raise UtmError(f"The {name} must contain digits only.")
+        raise UtmError(t("The {name} must contain digits only.").format(name=label))
     if len(cleaned) != 6:
-        raise UtmError(f"The {name} must be exactly 6 digits (you entered {len(cleaned)}).")
+        raise UtmError(
+            t("The {name} must be exactly 6 digits (you entered {count}).").format(
+                name=label, count=ltr(len(cleaned)))
+        )
     return cleaned
 
 
@@ -43,7 +49,7 @@ def parse_utm(easting: str, northing: str) -> tuple[float, float]:
 def parse_utm12(text: str) -> tuple[float, float]:
     digits = re.sub(r"[\s,]", "", text)
     if not digits.isdigit() or len(digits) != 12:
-        raise UtmError("Enter 12 digits: 6 for easting, then 6 for northing.")
+        raise UtmError(t("Enter 12 digits: 6 for easting, then 6 for northing."))
     return parse_utm(digits[:6], digits[6:])
 
 
@@ -68,7 +74,9 @@ def utm_input_to_latlon(easting: str, northing: str) -> LatLon:
     p = utm_to_latlon(e, n)
     if not in_israel(p):
         raise UtmError(
-            f"That position ({p.lat:.4f}, {p.lon:.4f}) is outside Israel. "
-            "Check that the easting and northing are not swapped or mistyped."
+            t(
+                "That position ({lat}, {lon}) is outside Israel. "
+                "Check that the easting and northing are not swapped or mistyped."
+            ).format(lat=ltr(f"{p.lat:.4f}"), lon=ltr(f"{p.lon:.4f}"))
         )
     return p

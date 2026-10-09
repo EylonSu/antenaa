@@ -26,7 +26,7 @@ antenna-tracker = "antenna_tracker.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-antenna_tracker = ["ui/web/*.html", "ui/web/vendor/*"]
+antenna_tracker = ["ui/web/*.html", "ui/web/*.png", "ui/web/vendor/*", "ui/assets/*.png", "assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

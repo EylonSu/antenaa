@@ -8,6 +8,7 @@ import serial
 from serial.tools import list_ports
 
 from antenna_tracker.hardware import fake_turret
+from antenna_tracker.i18n import ltr, t
 
 BAUD_RATE = 9600
 
@@ -44,8 +45,8 @@ class PortInfo:
 
     @property
     def label(self) -> str:
-        suffix = "  (Recommended)" if self.recommended else ""
-        return f"{self.device} - {self.description}{suffix}"
+        suffix = t("  (Recommended)") if self.recommended else ""
+        return f"{ltr(self.device)} - {self.description}{suffix}"
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ def open_serial(device: str, timeout: float = 0.1) -> SerialLike:
 
 def _fake_info() -> PortInfo:
     return PortInfo(
-        fake_turret.FAKE_PORT, "Simulated tracker", fake_turret.FAKE_VID,
+        fake_turret.FAKE_PORT, t("Simulated tracker"), fake_turret.FAKE_VID,
         fake_turret.FAKE_PID, fake_turret.FAKE_SERIAL_NUMBER, False, "Simulator",
     )
 
@@ -145,18 +146,24 @@ def handshake(ser: SerialLike, ready_timeout: float = 3.0, reply_timeout: float 
         pos = parse_ok(read_line(ser))
         if pos is not None:
             return pos
-    raise TimeoutError("No reply to GET")
+    raise TimeoutError(t("No reply to GET"))
 
 
 def test_port(device: str, ready_timeout: float = 3.0) -> TestResult:
     try:
         ser = open_serial(device)
     except (serial.SerialException, OSError) as e:
-        return TestResult(False, f"Could not open {device}: {e}")
+        return TestResult(False, t("Could not open {device}: {err}").format(device=ltr(device), err=ltr(e)))
     try:
         pan, tilt = handshake(ser, ready_timeout)
-        return TestResult(True, f"Tracker found (pan {pan}, tilt {tilt})", pan, tilt)
+        return TestResult(
+            True,
+            t("Tracker found (pan {pan}, tilt {tilt})").format(pan=ltr(pan), tilt=ltr(tilt)),
+            pan, tilt,
+        )
     except (TimeoutError, serial.SerialException, OSError) as e:
-        return TestResult(False, f"No tracker answered on {device}: {e}")
+        return TestResult(
+            False, t("No tracker answered on {device}: {err}").format(device=ltr(device), err=ltr(e)),
+        )
     finally:
         ser.close()

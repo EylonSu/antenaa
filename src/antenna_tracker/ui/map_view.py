@@ -9,6 +9,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from antenna_tracker.geo import pointing
+from antenna_tracker.i18n import is_rtl
 from antenna_tracker.ui import tiles
 
 tiles.register_scheme()
@@ -23,7 +24,7 @@ def _install_tile_handler() -> None:
         profile = QWebEngineProfile.defaultProfile()
         _tile_handler = tiles.TileSchemeHandler(profile)
         profile.installUrlSchemeHandler(tiles.SCHEME, _tile_handler)
-SECTOR_RADIUS_M = 3000.0
+SECTOR_RADIUS_M = 11000.0
 FULL_ELEVATION_PANS = (70, 110)
 
 
@@ -60,7 +61,7 @@ class MapView(QWebEngineView):
     drone_moved = Signal(float, float)
     basemap_changed = Signal(str)
 
-    def __init__(self, parent=None, basemap: str = "osm") -> None:
+    def __init__(self, parent=None, basemap: str = "osm", zoom_scaled_marker: bool = False) -> None:
         _install_tile_handler()
         super().__init__(parent)
         self._ready = False
@@ -79,7 +80,10 @@ class MapView(QWebEngineView):
         if basemap not in ("osm", "satellite"):
             basemap = "osm"
         url = QUrl.fromLocalFile(str(MAP_HTML))
-        url.setQuery(f"basemap={basemap}")
+        lang = "he" if is_rtl() else "en"
+        url.setQuery(
+            f"basemap={basemap}" + ("&zoomscale=1" if zoom_scaled_marker else "") + f"&lang={lang}"
+        )
         self.load(url)
 
     @property
@@ -101,6 +105,10 @@ class MapView(QWebEngineView):
 
     def set_antenna(self, lat: float, lon: float, zoom: int | None = None) -> None:
         self._call("setAntenna", lat, lon, zoom)
+
+    def set_antenna_pose(self, ref_az_true: float, pan: float, tilt: float) -> None:
+        az, el = pointing.pan_tilt_to_az_el(pan, tilt, ref_az_true)
+        self._call("setAntennaPose", ref_az_true, az, el, pan, tilt)
 
     def set_sector(self, lat: float, lon: float, ref_az_true: float) -> None:
         outer = sector_polygon(lat, lon, ref_az_true, pointing.PAN_MIN, pointing.PAN_MAX)

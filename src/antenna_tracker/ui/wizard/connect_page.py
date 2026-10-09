@@ -11,6 +11,7 @@ from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware import port_finder
 from antenna_tracker.hardware.port_finder import PortInfo, TestResult
 from antenna_tracker.hardware.turret_client import TurretClient
+from antenna_tracker.i18n import t
 from antenna_tracker.ui.theme import ACCENT, MUTED, card, muted
 from antenna_tracker.video.capture import VideoPreview, list_video_inputs
 
@@ -28,8 +29,8 @@ class ConnectPage(QWizardPage):
     def __init__(self, config: AppConfig, turret: TurretClient, dev_mode: bool, parent=None) -> None:
         super().__init__(parent)
         self.config, self.turret, self.dev_mode = config, turret, dev_mode
-        self.setTitle("Connect your equipment")
-        self.setSubTitle("Select the tracker and receiver video, then verify the hardware link.")
+        self.setTitle(t("Connect your equipment"))
+        self.setSubTitle(t("Select the tracker and receiver video, then verify the hardware link."))
         self._ports: list[PortInfo] = []
         self._tested: str | None = None
         self._tester = _Tester(self)
@@ -37,9 +38,9 @@ class ConnectPage(QWizardPage):
 
         self.port_combo = QComboBox(styleSheet=BIG)
         self.port_combo.currentIndexChanged.connect(self._port_changed)
-        self.refresh_btn = QPushButton("\u21bb Refresh", styleSheet=BIG)
+        self.refresh_btn = QPushButton(t("\u21bb Refresh"), styleSheet=BIG)
         self.refresh_btn.clicked.connect(self.refresh_ports)
-        self.test_btn = QPushButton("Test", styleSheet=BIG + "font-weight: bold; min-width: 120px;")
+        self.test_btn = QPushButton(t("Test"), styleSheet=BIG + "font-weight: bold; min-width: 120px;")
         self.test_btn.clicked.connect(self.test)
         self.result = QLabel(styleSheet=f"font-size: 14px; color: {MUTED};", wordWrap=True)
 
@@ -47,18 +48,18 @@ class ConnectPage(QWizardPage):
         self.video_combo.currentIndexChanged.connect(self._video_changed)
         self.preview = VideoPreview()
         self.preview.setFixedSize(384, 216)
-        self.preview.setStyleSheet("border: 1px solid #263751; border-radius: 8px; background: #050b13;")
+        self.preview.setStyleSheet("border: 1px solid #1d2b42; border-radius: 8px; background: #050b13;")
 
         port_row = QHBoxLayout()
         port_row.addWidget(self.port_combo, 1)
         port_row.addWidget(self.refresh_btn)
         port_row.addWidget(self.test_btn)
-        tracker_card, tracker = card("TRACKER LINK")
-        tracker.addWidget(muted("Choose the USB device and test the connection before continuing."))
+        tracker_card, tracker = card(t("TRACKER LINK"))
+        tracker.addWidget(muted(t("Choose the USB device and test the connection before continuing.")))
         tracker.addLayout(port_row)
         tracker.addWidget(self.result)
-        video_card, video = card("DRONE RECEIVER VIDEO")
-        video.addWidget(muted("Choose the feed containing the drone telemetry QR code."))
+        video_card, video = card(t("DRONE RECEIVER VIDEO"))
+        video.addWidget(muted(t("Choose the feed containing the drone telemetry QR code.")))
         video.addWidget(self.video_combo)
         video.addWidget(self.preview, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -79,7 +80,7 @@ class ConnectPage(QWizardPage):
         for p in self._ports:
             self.port_combo.addItem(p.label, p.device)
         if not self._ports:
-            self.port_combo.addItem("No tracker found - check the USB cable", None)
+            self.port_combo.addItem(t("No tracker found - check the USB cable"), None)
         devices = [p.device for p in self._ports]
         if self.config.port_device in devices:
             self.port_combo.setCurrentIndex(devices.index(self.config.port_device))
@@ -88,7 +89,7 @@ class ConnectPage(QWizardPage):
 
     def _load_videos(self) -> None:
         self.video_combo.blockSignals(True)
-        self.video_combo.addItem("No video", None)
+        self.video_combo.addItem(t("No video"), None)
         for dev_id, name in list_video_inputs():
             self.video_combo.addItem(name, dev_id)
         idx = self.video_combo.findData(self.config.video_device_id)
@@ -102,7 +103,7 @@ class ConnectPage(QWizardPage):
 
     def _port_changed(self) -> None:
         self._tested = None
-        self.result.setText("Press Test to check the tracker.")
+        self.result.setText(t("Press Test to check the tracker."))
         self.result.setStyleSheet(f"font-size: 14px; color: {MUTED};")
         self.test_btn.setEnabled(self.selected_port() is not None)
         self.completeChanged.emit()
@@ -116,7 +117,7 @@ class ConnectPage(QWizardPage):
             return
         self.turret.close()
         self.test_btn.setEnabled(False)
-        self.result.setText("Testing... please wait")
+        self.result.setText(t("Testing... please wait"))
         self.result.setStyleSheet(f"font-size: 14px; color: {MUTED};")
         self._tester.run(port.device)
 
@@ -126,7 +127,7 @@ class ConnectPage(QWizardPage):
         if res.ok and port is not None:
             self._tested = port.device
             self.result.setText(f"\u2714 {res.message}")
-            self.result.setStyleSheet("font-size: 14px; color: #35d07f; font-weight: bold;")
+            self.result.setStyleSheet("font-size: 14px; color: #3ddc84; font-weight: bold;")
         else:
             self._tested = None
             self.result.setText(f"\u2716 {res.message}")

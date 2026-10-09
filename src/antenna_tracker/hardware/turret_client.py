@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from antenna_tracker.hardware import port_finder
 from antenna_tracker.hardware.port_finder import PortIdentity, SerialLike
+from antenna_tracker.i18n import ltr, t
 
 
 class LinkState(str, Enum):
@@ -71,6 +72,7 @@ class _Worker(QThread):
         self._state = LinkState.DISCONNECTED
         self._ever_connected = False
         self._missed = 0
+        self.simulated_power = True
 
     def stop(self) -> None:
         self._stopping = True
@@ -112,13 +114,23 @@ class _Worker(QThread):
                 pass
             self._ser = None
 
+    def _wait_for_simulated_power(self) -> None:
+        while not self._stopping and not self.simulated_power:
+            time.sleep(0.05)
+        if self._stopping:
+            raise _Stop
+
     def _try_connect(self) -> None:
+        if not self.simulated_power:
+            self._wait_for_simulated_power()
+            return
         if self._state is not LinkState.POWER_LOST:
             self._set_state(LinkState.CONNECTING)
         device = self._finder(self.identity)
         if device is None:
             if not self._ever_connected:
-                self.connection_failed.emit(f"Port {self.identity.device} not found")
+                self.connection_failed.emit(
+                    t("Port {device} not found").format(device=ltr(self.identity.device)))
             self._sleep(self.reconnect_s)
             return
         try:
@@ -136,7 +148,7 @@ class _Worker(QThread):
             except (serial.SerialException, OSError):
                 pass
             if not self._ever_connected:
-                self.connection_failed.emit(f"No tracker answered: {e}")
+                self.connection_failed.emit(t("No tracker answered: {err}").format(err=ltr(e)))
             self._sleep(self.reconnect_s)
             return
         self._ser = ser
@@ -181,15 +193,17 @@ class _Worker(QThread):
 
     def _service_once(self) -> None:
         cmd = self._next_command()
+        if not self.simulated_power:
+            raise _Lost(t("Simulated power off"))
         heartbeat = cmd is None
         if heartbeat and self._finder(self.identity) is None:
-            raise _Lost("Tracker port disappeared")
+            raise _Lost(t("Tracker port disappeared"))
         reply = self._transact(cmd.text if cmd else "GET")
         if reply is None:
             if heartbeat:
                 self._missed += 1
                 if self._missed >= 2:
-                    raise _Lost("Tracker stopped answering")
+                    raise _Lost(t("Tracker stopped answering"))
             return
         self._missed = 0
         if reply == "LIMIT" or reply == "LINIT":
@@ -209,17 +223,19 @@ class _Worker(QThread):
             while time.monotonic() < deadline:
                 if self._stopping:
                     raise _Stop
+                if not self.simulated_power:
+                    raise _Lost(t("Simulated power off"))
                 line = port_finder.read_line(self._ser)
                 if not line:
                     continue
                 self.line_received.emit(line)
                 if line == "Turret Ready":
-                    raise _Lost("Tracker rebooted")
+                    raise _Lost(t("Tracker rebooted"))
                 if line.startswith("OK:") or line in ("LIMIT", "LINIT"):
                     return line
             return None
         except (serial.SerialException, OSError) as e:
-            raise _Lost(f"Serial error: {e}") from e
+            raise _Lost(t("Serial error: {err}").format(err=ltr(e))) from e
 
     def _on_lost(self, reason: str) -> None:
         self._close()
@@ -295,6 +311,14 @@ class TurretClient(QObject):
             self._worker.wait(wait_ms)
             self._worker = None
         self._state = LinkState.DISCONNECTED
+
+    def set_simulated_power(self, on: bool) -> None:
+        """Drop or restore the live link without unplugging the tracker."""
+        if self._worker is None:
+            return
+        self._worker.simulated_power = on
+        if not on:
+            self._worker.commands.put(_Cmd("GET"))
 
     def _send(self, cmd: _Cmd) -> None:
         if self._worker is not None:

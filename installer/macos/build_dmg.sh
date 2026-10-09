@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${1:-0.1.0}"
 APP="$ROOT/dist/AntennaTracker.app"
 DMG="$ROOT/dist/AntennaTracker-$VERSION.dmg"
-VOLNAME="Antenna Tracker"
+VOLNAME="antenaa"
 
 [[ -d "$APP" ]] || { echo "Missing $APP - run the PyInstaller build first" >&2; exit 1; }
 rm -f "$DMG"

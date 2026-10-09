@@ -6,6 +6,8 @@ from pathlib import Path
 
 from platformdirs import user_config_dir
 
+from antenna_tracker.i18n import normalized_language
+
 APP_NAME = "AntennaTracker"
 CONFIG_FILE = "config.json"
 
@@ -51,6 +53,7 @@ class AppConfig:
     qr_decode_fps: float = 10.0
     qr_roi: tuple[float, float] = (0.25, 0.35)  # fraction of width, height from top-left
     map_basemap: str = "osm"
+    language: str = "he"
 
     @property
     def effective_takeoff_alt_amsl(self) -> float:
@@ -86,6 +89,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         cfg.qr_fields = QrFields(**{k: v for k, v in qf.items() if k in names})
     if cfg.map_basemap not in ("osm", "satellite"):
         cfg.map_basemap = "osm"
+    cfg.language = normalized_language(cfg.language)
     return cfg
 
 

@@ -5,7 +5,7 @@
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif
-#define AppName "Antenna Tracker"
+#define AppName "antenaa"
 #define AppExe "AntennaTracker.exe"
 
 [Setup]
