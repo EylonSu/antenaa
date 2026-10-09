@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from antenna_tracker.geo.pointing import destination
-from antenna_tracker.sources.base import DronePosition, PositionSource
+from antenna_tracker.sources.base import JAM_DISTANCE_M, DronePosition, PositionSource, separation_m
 
 
 class SimulatedSource(PositionSource):
     """Position set by the UI (draggable marker), optionally flying a circle around a center."""
+
+    possible_jamming = Signal()
 
     def __init__(self, parent: QObject | None = None, tick_s: float = 0.2) -> None:
         super().__init__(parent)
@@ -31,9 +33,12 @@ class SimulatedSource(PositionSource):
         return self._timer.isActive()
 
     def set_position(self, lat: float, lon: float, alt_amsl: float | None = None) -> None:
-        self._lat, self._lon = lat, lon
-        if alt_amsl is not None:
-            self._alt = alt_amsl
+        alt = self._alt if alt_amsl is None else alt_amsl
+        prev = self.latest()
+        if prev is not None and separation_m(prev.lat, prev.lon, prev.alt_amsl, lat, lon, alt) >= JAM_DISTANCE_M:
+            self.possible_jamming.emit()
+            return
+        self._lat, self._lon, self._alt = lat, lon, alt
         self._has_pos = True
         self._emit()
 

@@ -7,9 +7,21 @@
 <script src="vendor/leaflet.js"></script>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <style>
-  html, body, #map { height: 100%; margin: 0; padding: 0; background: #dde3ea; }
+  html, body, #map { height: 100%; margin: 0; padding: 0; background: #08111f; }
   .ant-icon { font-size: 34px; line-height: 34px; text-align: center; }
   .drone-icon { font-size: 34px; line-height: 34px; text-align: center; cursor: grab; }
+  .basemap-toggle { display: flex; align-items: stretch; background: #0f1b2d; border: 1px solid #32445d;
+                    border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+                    font: 600 12px/32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
+  .basemap-toggle a { padding: 0 12px; color: #8fa3bd; text-decoration: none; background: #0f1b2d; }
+  .basemap-toggle a.active { background: #35bdf5; color: #04121c; font-weight: 800; }
+  .basemap-toggle span { display: none; }
+  .leaflet-bar { border: 1px solid #32445d !important; border-radius: 8px !important; overflow: hidden; }
+  .leaflet-bar a { color: #e8eef7 !important; background: #0f1b2d !important; border-color: #32445d !important; }
+  .leaflet-control-attribution { color: #8fa3bd; background: rgba(8,17,31,.85) !important; }
+  .leaflet-control-attribution a { color: #65c9f2; }
+  .leaflet-tile-pane { filter: brightness(.48) saturate(.62) hue-rotate(168deg); }
+  .leaflet-overlay-pane { filter: drop-shadow(0 0 4px rgba(53,189,245,.2)); }
   #offline { position: absolute; top: 40%; width: 100%; text-align: center;
              font: 20px sans-serif; color: #555; display: none; }
 </style>
@@ -21,9 +33,34 @@
 var bridge = null;
 var map = null;
 var antenna = null, drone = null, outer = null, inner = null, recLine = null, actLine = null;
+var layers = null, baseLayer = null, toggleRoot = null;
 
 function icon(cls, glyph) {
   return L.divIcon({ className: cls, html: glyph, iconSize: [34, 34], iconAnchor: [17, 17] });
+}
+
+function basemapFromPage() {
+  var name = new URLSearchParams(window.location.search).get("basemap");
+  return name === "satellite" ? "satellite" : "osm";
+}
+
+function syncToggle(name) {
+  if (!toggleRoot) return;
+  var links = toggleRoot.getElementsByTagName("a");
+  for (var i = 0; i < links.length; i++) {
+    links[i].className = links[i].getAttribute("data-basemap") === name ? "active" : "";
+  }
+}
+
+function applyBasemap(name, notify) {
+  if (!map || !layers || !layers[name]) return;
+  if (baseLayer !== layers[name]) {
+    if (baseLayer) map.removeLayer(baseLayer);
+    baseLayer = layers[name];
+    baseLayer.addTo(map);
+  }
+  syncToggle(name);
+  if (notify && bridge) bridge.basemapChanged(name);
 }
 
 function init() {
@@ -31,10 +68,39 @@ function init() {
     document.getElementById("offline").style.display = "block";
     return;
   }
+  layers = {
+    osm: L.tileLayer("tiles:/osm/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+    }),
+    satellite: L.tileLayer("tiles:/satellite/{z}/{x}/{y}.jpg", {
+      maxZoom: 19, maxNativeZoom: 14,
+      attribution: '<a href="https://cloudless.eox.at">EOxCloudless</a> by EOX (Contains modified Copernicus Sentinel data 2016)'
+    })
+  };
   map = L.map("map", { zoomControl: true }).setView([31.5, 34.9], 8);
-  L.tileLayer("tiles:/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
-  }).addTo(map);
+  var BasemapToggle = L.Control.extend({
+    options: { position: "topright" },
+    onAdd: function () {
+      var div = L.DomUtil.create("div", "basemap-toggle");
+      div.innerHTML = '<a href="#" data-basemap="osm">Map</a><span>|</span>'
+        + '<a href="#" data-basemap="satellite">Satellite</a>';
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
+      L.DomEvent.on(div, "click", function (e) {
+        var link = e.target;
+        while (link && link !== div && !(link.getAttribute && link.getAttribute("data-basemap"))) {
+          link = link.parentNode;
+        }
+        if (!link || link === div) return;
+        L.DomEvent.preventDefault(e);
+        applyBasemap(link.getAttribute("data-basemap"), true);
+      });
+      toggleRoot = div;
+      return div;
+    }
+  });
+  new BasemapToggle().addTo(map);
+  applyBasemap(basemapFromPage(), false);
   map.on("click", function (e) {
     if (drone && drone.options.draggable && bridge) {
       drone.setLatLng(e.latlng);
@@ -54,8 +120,8 @@ window.api = {
     if (!map) return;
     if (outer) map.removeLayer(outer);
     if (inner) map.removeLayer(inner);
-    outer = L.polygon(outerPts, { color: "#2e7d32", weight: 1, fillColor: "#66bb6a", fillOpacity: 0.15 }).addTo(map);
-    inner = L.polygon(innerPts, { color: "#1b5e20", weight: 1, fillColor: "#2e7d32", fillOpacity: 0.25 }).addTo(map);
+    outer = L.polygon(outerPts, { color: "#35d07f", weight: 1, fillColor: "#35d07f", fillOpacity: 0.12 }).addTo(map);
+    inner = L.polygon(innerPts, { color: "#35d07f", weight: 1, fillColor: "#35d07f", fillOpacity: 0.22 }).addTo(map);
   },
   setDrone: function (lat, lon, draggable) {
     if (!map) return;
@@ -69,15 +135,25 @@ window.api = {
       drone.setLatLng([lat, lon]);
     }
   },
+  setDroneLastKnown: function (on) {
+    if (!drone) return;
+    var el = drone.getElement();
+    if (el) { el.style.filter = on ? "grayscale(1)" : ""; el.style.opacity = on ? "0.5" : ""; }
+    if (on) drone.bindTooltip("last known", { permanent: true, direction: "bottom" }).openTooltip();
+    else drone.unbindTooltip();
+  },
   setRecommended: function (pts) {
     if (!map) return;
     if (recLine) { map.removeLayer(recLine); recLine = null; }
-    if (pts) recLine = L.polyline(pts, { color: "#1565c0", weight: 4, dashArray: "10 8" }).addTo(map);
+    if (pts) recLine = L.polyline(pts, { color: "#4ea1ff", weight: 4, dashArray: "10 8" }).addTo(map);
   },
   setActual: function (pts) {
     if (!map) return;
     if (actLine) { map.removeLayer(actLine); actLine = null; }
-    if (pts) actLine = L.polyline(pts, { color: "#00c853", weight: 5 }).addTo(map);
+    if (pts) actLine = L.polyline(pts, { color: "#35d07f", weight: 5 }).addTo(map);
+  },
+  setBasemap: function (name) {
+    applyBasemap(name, false);
   }
 };
 

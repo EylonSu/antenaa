@@ -1,3 +1,4 @@
+import math
 import time
 
 import pytest
@@ -89,6 +90,20 @@ def test_out_of_range_and_no_power(setup) -> None:
     turret.is_connected = False
     ctl.tick()
     assert ctl.status is TrackStatus.NO_POWER
+
+
+def test_simulated_source_rejects_5km_jump(qapp: object) -> None:
+    sim = SimulatedSource()
+    jams: list[bool] = []
+    sim.possible_jamming.connect(lambda: jams.append(True))
+    sim.set_position(31.77, 35.21, 800)
+    near = 31.77 + math.degrees(1000 / 6_371_000)
+    sim.set_position(near, 35.21)
+    assert jams == [] and sim.latest().lat == pytest.approx(near)
+    kept = sim.latest()
+    sim.set_position(near + math.degrees(6000 / 6_371_000), 35.21)
+    assert jams == [True]
+    assert sim.latest() is kept
 
 
 def test_simulated_source_circle(qapp: object) -> None:

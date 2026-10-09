@@ -1,4 +1,4 @@
-"""Serve OSM tiles to the map page as tiles:/z/x/y.png through Qt's network stack with a disk cache."""
+"""Serve street and satellite tiles to the map page through Qt's network stack with a disk cache."""
 from __future__ import annotations
 
 import re
@@ -12,10 +12,26 @@ from PySide6.QtWebEngineCore import QWebEngineUrlRequestJob, QWebEngineUrlScheme
 from antenna_tracker.config import APP_NAME
 
 SCHEME = b"tiles"
-TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+# WMTS row (y) comes before column (x).
+SATELLITE_TILE_URL = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg"
 USER_AGENT = b"AntennaTracker/0.1 (desktop app)"
 CACHE_BYTES = 500 * 1024 * 1024
-_PATH_RE = re.compile(r"^/?(\d+)/(\d+)/(\d+)\.png$")
+_TILE_RE = re.compile(
+    r"^/?(?P<layer>osm|satellite)/(?P<z>\d+)/(?P<x>\d+)/(?P<y>\d+)\.(?P<ext>png|jpg)$")
+
+
+def parse_tile_path(path: str) -> tuple[str, bytes] | None:
+    """Map a tiles: path to (upstream URL, content type), or None if it is not a tile we serve."""
+    m = _TILE_RE.match(path)
+    if m is None:
+        return None
+    layer, z, x, y, ext = m.group("layer", "z", "x", "y", "ext")
+    if layer == "osm" and ext == "png":
+        return OSM_TILE_URL.format(z=z, x=x, y=y), b"image/png"
+    if layer == "satellite" and ext == "jpg":
+        return SATELLITE_TILE_URL.format(z=z, y=y, x=x), b"image/jpeg"
+    return None
 
 
 def register_scheme() -> None:
@@ -37,32 +53,33 @@ class TileSchemeHandler(QWebEngineUrlSchemeHandler):
         cache.setCacheDirectory(str(Path(user_cache_dir(APP_NAME, appauthor=False)) / "tiles"))
         cache.setMaximumCacheSize(CACHE_BYTES)
         self._nam.setCache(cache)
-        self._jobs: dict[QNetworkReply, QWebEngineUrlRequestJob] = {}
+        self._jobs: dict[QNetworkReply, tuple[QWebEngineUrlRequestJob, bytes]] = {}
 
     def requestStarted(self, job: QWebEngineUrlRequestJob) -> None:
-        m = _PATH_RE.match(job.requestUrl().path())
-        if m is None:
+        parsed = parse_tile_path(job.requestUrl().path())
+        if parsed is None:
             job.fail(QWebEngineUrlRequestJob.Error.UrlInvalid)
             return
-        z, x, y = m.groups()
-        req = QNetworkRequest(QUrl(TILE_URL.format(z=z, x=x, y=y)))
+        url, mime = parsed
+        req = QNetworkRequest(QUrl(url))
         req.setRawHeader(b"User-Agent", USER_AGENT)
         req.setAttribute(QNetworkRequest.Attribute.CacheLoadControlAttribute,
                          QNetworkRequest.CacheLoadControl.PreferCache)
         reply = self._nam.get(req)
-        self._jobs[reply] = job
+        self._jobs[reply] = (job, mime)
         job.destroyed.connect(lambda *_: self._jobs.pop(reply, None) and reply.abort())
         reply.finished.connect(lambda: self._finish(reply))
 
     def _finish(self, reply: QNetworkReply) -> None:
         reply.deleteLater()
-        job = self._jobs.pop(reply, None)
-        if job is None:
+        found = self._jobs.pop(reply, None)
+        if found is None:
             return
+        job, mime = found
         if reply.error() != QNetworkReply.NetworkError.NoError:
             job.fail(QWebEngineUrlRequestJob.Error.RequestFailed)
             return
         buf = QBuffer(job)
         buf.setData(reply.readAll())
         buf.open(QIODevice.OpenModeFlag.ReadOnly)
-        job.reply(b"image/png", buf)
+        job.reply(mime, buf)

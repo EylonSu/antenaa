@@ -11,9 +11,10 @@ from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware import port_finder
 from antenna_tracker.hardware.port_finder import PortInfo, TestResult
 from antenna_tracker.hardware.turret_client import TurretClient
+from antenna_tracker.ui.theme import ACCENT, MUTED, card, muted
 from antenna_tracker.video.capture import VideoPreview, list_video_inputs
 
-BIG = "font-size: 20px; padding: 8px;"
+BIG = "font-size: 15px; padding: 8px;"
 
 
 class _Tester(QObject):
@@ -27,8 +28,8 @@ class ConnectPage(QWizardPage):
     def __init__(self, config: AppConfig, turret: TurretClient, dev_mode: bool, parent=None) -> None:
         super().__init__(parent)
         self.config, self.turret, self.dev_mode = config, turret, dev_mode
-        self.setTitle("Step 1 of 3: Connect")
-        self.setSubTitle("Plug in the tracker's USB cable and pick it below.")
+        self.setTitle("Connect your equipment")
+        self.setSubTitle("Select the tracker and receiver video, then verify the hardware link.")
         self._ports: list[PortInfo] = []
         self._tested: str | None = None
         self._tester = _Tester(self)
@@ -40,25 +41,32 @@ class ConnectPage(QWizardPage):
         self.refresh_btn.clicked.connect(self.refresh_ports)
         self.test_btn = QPushButton("Test", styleSheet=BIG + "font-weight: bold; min-width: 120px;")
         self.test_btn.clicked.connect(self.test)
-        self.result = QLabel(styleSheet="font-size: 20px;", wordWrap=True)
+        self.result = QLabel(styleSheet=f"font-size: 14px; color: {MUTED};", wordWrap=True)
 
         self.video_combo = QComboBox(styleSheet=BIG)
         self.video_combo.currentIndexChanged.connect(self._video_changed)
         self.preview = VideoPreview()
-        self.preview.setFixedSize(320, 180)
+        self.preview.setFixedSize(384, 216)
+        self.preview.setStyleSheet("border: 1px solid #263751; border-radius: 8px; background: #050b13;")
 
         port_row = QHBoxLayout()
         port_row.addWidget(self.port_combo, 1)
         port_row.addWidget(self.refresh_btn)
         port_row.addWidget(self.test_btn)
+        tracker_card, tracker = card("TRACKER LINK")
+        tracker.addWidget(muted("Choose the USB device and test the connection before continuing."))
+        tracker.addLayout(port_row)
+        tracker.addWidget(self.result)
+        video_card, video = card("DRONE RECEIVER VIDEO")
+        video.addWidget(muted("Choose the feed containing the drone telemetry QR code."))
+        video.addWidget(self.video_combo)
+        video.addWidget(self.preview, alignment=Qt.AlignmentFlag.AlignLeft)
+
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("Tracker:", styleSheet="font-size: 22px; font-weight: bold;"))
-        lay.addLayout(port_row)
-        lay.addWidget(self.result)
-        lay.addSpacing(20)
-        lay.addWidget(QLabel("Video from the drone receiver:", styleSheet="font-size: 22px; font-weight: bold;"))
-        lay.addWidget(self.video_combo)
-        lay.addWidget(self.preview, alignment=Qt.AlignmentFlag.AlignLeft)
+        lay.setContentsMargins(0, 16, 0, 8)
+        lay.setSpacing(14)
+        lay.addWidget(tracker_card)
+        lay.addWidget(video_card)
         lay.addStretch(1)
 
         self.refresh_ports()
@@ -95,7 +103,7 @@ class ConnectPage(QWizardPage):
     def _port_changed(self) -> None:
         self._tested = None
         self.result.setText("Press Test to check the tracker.")
-        self.result.setStyleSheet("font-size: 20px; color: #555;")
+        self.result.setStyleSheet(f"font-size: 14px; color: {MUTED};")
         self.test_btn.setEnabled(self.selected_port() is not None)
         self.completeChanged.emit()
 
@@ -109,7 +117,7 @@ class ConnectPage(QWizardPage):
         self.turret.close()
         self.test_btn.setEnabled(False)
         self.result.setText("Testing... please wait")
-        self.result.setStyleSheet("font-size: 20px; color: #555;")
+        self.result.setStyleSheet(f"font-size: 14px; color: {MUTED};")
         self._tester.run(port.device)
 
     def _on_tested(self, res: TestResult) -> None:
@@ -118,11 +126,11 @@ class ConnectPage(QWizardPage):
         if res.ok and port is not None:
             self._tested = port.device
             self.result.setText(f"\u2714 {res.message}")
-            self.result.setStyleSheet("font-size: 20px; color: #2e7d32; font-weight: bold;")
+            self.result.setStyleSheet("font-size: 14px; color: #35d07f; font-weight: bold;")
         else:
             self._tested = None
             self.result.setText(f"\u2716 {res.message}")
-            self.result.setStyleSheet("font-size: 20px; color: #c62828; font-weight: bold;")
+            self.result.setStyleSheet("font-size: 14px; color: #ff5d6c; font-weight: bold;")
         self.completeChanged.emit()
 
     def isComplete(self) -> bool:

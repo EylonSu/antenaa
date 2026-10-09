@@ -13,7 +13,9 @@ from antenna_tracker.hardware import fake_turret
 from antenna_tracker.hardware.port_finder import PortIdentity
 from antenna_tracker.hardware.turret_client import LinkState, TurretClient
 from antenna_tracker.ui.main_window import MainWindow
+from antenna_tracker.ui.theme import APP_STYLE
 from antenna_tracker.ui.wizard import SetupWizard
+from antenna_tracker.video.capture import set_video_file_override
 
 DEMO_UTM = ("667000", "550500")  # Tel Aviv area
 DEMO_ALT = 30.0
@@ -24,6 +26,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--dev", action="store_true", help="developer mode: offer the simulated tracker")
     p.add_argument("--demo", action="store_true",
                    help="developer mode, skip the wizard and use the simulated tracker at a demo location")
+    p.add_argument("--video-file", metavar="PATH",
+                   help="developer: play this recording (looped) instead of the capture device")
     args, _ = p.parse_known_args(argv)
     return args
 
@@ -87,10 +91,11 @@ class App:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     args = parse_args(argv[1:])
+    set_video_file_override(args.video_file)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     qapp = QApplication(argv)
     qapp.setApplicationName("Antenna Tracker")
-    qapp.setStyleSheet("QWidget { font-size: 16px; }")
+    qapp.setStyleSheet(APP_STYLE)
     config = load_config()
     dev_mode = args.dev or args.demo or config.developer_mode
     app = App(demo_config(config) if args.demo else config, dev_mode)

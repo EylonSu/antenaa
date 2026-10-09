@@ -24,6 +24,7 @@ class TrackStatus(str, Enum):
     NO_POSITION = "no_position"
     STALE = "stale"
     NO_POWER = "no_power"
+    NO_GPS = "no_gps"
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class TrackingController(QObject):
         self._status: TrackStatus | None = None
         self._last_cmd: tuple[int, int] | None = None
         self._last_solution: Solution | None = None
+        self._drone_gps_ok = True
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.tick)
         self.set_interval(interval_s)
@@ -109,6 +111,26 @@ class TrackingController(QObject):
         self.mode_changed.emit(mode.value)
         self.tick()
 
+    @property
+    def drone_gps_ok(self) -> bool:
+        return self._drone_gps_ok
+
+    def set_drone_gps(self, ok: bool, switch_to_manual: bool = True) -> None:
+        """Lost GPS shows NO_GPS (and goes MANUAL); restored never returns to AUTO by itself."""
+        if ok == self._drone_gps_ok:
+            return
+        self._drone_gps_ok = ok
+        if not ok and switch_to_manual and self._mode is not Mode.MANUAL:
+            self.set_mode(Mode.MANUAL)
+        else:
+            self.tick()
+
+    def on_gps_lost(self) -> None:
+        self.set_drone_gps(False)
+
+    def on_gps_restored(self) -> None:
+        self.set_drone_gps(True)
+
     def reset_last_command(self) -> None:
         """Call after power restore or INIT so the next AUTO tick resends."""
         self._last_cmd = None
@@ -138,6 +160,9 @@ class TrackingController(QObject):
 
         if not self.turret.is_connected:
             self._set_status(TrackStatus.NO_POWER)
+            return
+        if not self._drone_gps_ok:
+            self._set_status(TrackStatus.NO_GPS)
             return
         if self._mode is Mode.MANUAL:
             self._set_status(TrackStatus.MANUAL)

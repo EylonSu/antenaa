@@ -30,6 +30,7 @@ FULL_ELEVATION_PANS = (70, 110)
 class MapBridge(QObject):
     ready = Signal()
     drone_moved = Signal(float, float)
+    basemap_changed = Signal(str)
 
     @Slot()
     def mapReady(self) -> None:
@@ -38,6 +39,10 @@ class MapBridge(QObject):
     @Slot(float, float)
     def droneMoved(self, lat: float, lon: float) -> None:
         self.drone_moved.emit(lat, lon)
+
+    @Slot(str)
+    def basemapChanged(self, name: str) -> None:
+        self.basemap_changed.emit(name)
 
 
 def sector_polygon(lat: float, lon: float, ref_az_true: float, pan_lo: int, pan_hi: int,
@@ -53,8 +58,9 @@ class MapView(QWebEngineView):
     """Leaflet map; Python->JS via runJavaScript (queued until the page is ready)."""
 
     drone_moved = Signal(float, float)
+    basemap_changed = Signal(str)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, basemap: str = "osm") -> None:
         _install_tile_handler()
         super().__init__(parent)
         self._ready = False
@@ -62,6 +68,7 @@ class MapView(QWebEngineView):
         self.bridge = MapBridge(self)
         self.bridge.ready.connect(self._on_ready)
         self.bridge.drone_moved.connect(self.drone_moved)
+        self.bridge.basemap_changed.connect(self.basemap_changed)
         self._channel = QWebChannel(self.page())
         self._channel.registerObject("bridge", self.bridge)
         self.page().setWebChannel(self._channel)
@@ -69,7 +76,11 @@ class MapView(QWebEngineView):
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
         self.setMinimumSize(300, 250)
-        self.load(QUrl.fromLocalFile(str(MAP_HTML)))
+        if basemap not in ("osm", "satellite"):
+            basemap = "osm"
+        url = QUrl.fromLocalFile(str(MAP_HTML))
+        url.setQuery(f"basemap={basemap}")
+        self.load(url)
 
     @property
     def is_ready(self) -> bool:
@@ -99,8 +110,16 @@ class MapView(QWebEngineView):
     def set_drone(self, lat: float, lon: float, draggable: bool = True) -> None:
         self._call("setDrone", lat, lon, draggable)
 
+    def set_drone_last_known(self, on: bool) -> None:
+        self._call("setDroneLastKnown", on)
+
     def set_recommended(self, line: list[list[float]] | None) -> None:
         self._call("setRecommended", line)
 
     def set_actual(self, line: list[list[float]] | None) -> None:
         self._call("setActual", line)
+
+    def set_basemap(self, name: str) -> None:
+        if name not in ("osm", "satellite"):
+            name = "osm"
+        self._call("setBasemap", name)

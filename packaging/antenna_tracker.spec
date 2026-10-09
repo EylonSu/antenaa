@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 APP_NAME = "AntennaTracker"
 BUNDLE_ID = "com.antenaa.antennatracker"
@@ -15,6 +15,7 @@ WEB_DIR = SRC / "antenna_tracker" / "ui" / "web"
 
 datas = [(str(WEB_DIR), "antenna_tracker/ui/web")]
 datas += collect_data_files("pyproj")
+binaries = collect_dynamic_libs("zxingcpp") + collect_dynamic_libs("numpy")
 
 hiddenimports = (
     collect_submodules("antenna_tracker")
@@ -26,12 +27,15 @@ hiddenimports = (
         "PySide6.QtMultimedia",
         "PySide6.QtMultimediaWidgets",
         "platformdirs",
+        "zxingcpp",
+        "numpy",
     ]
 )
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(SRC)],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=["tkinter", "pytest"],

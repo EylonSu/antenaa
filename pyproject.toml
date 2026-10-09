@@ -12,10 +12,12 @@ dependencies = [
     "pyserial>=3.5",
     "pyproj>=3.6",
     "platformdirs>=4.0",
+    "zxing-cpp>=2.2",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "segno>=1.6"]
 
 [project.scripts]
 antenna-tracker = "antenna_tracker.app:main"
