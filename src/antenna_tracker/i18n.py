@@ -127,16 +127,25 @@ _HE: dict[str, str] = {
     "Press Test to check the tracker.": "לחצו בדיקה כדי לבדוק את העוקב.",
     "Testing... please wait": "בודק... המתינו",
     "Set the tracker location": "מיקום העוקב",
-    "Enter the 12-digit UTM grid reference and verify the position on the map.": (
-        "הזינו רשת UTM בת \u206612\u2069 ספרות ואמתו את המיקום במפה."
+    "Enter the 12-digit UTM grid reference and verify the position on the map. An empty grid starts from this computer's location.": (
+        "הזינו רשת UTM בת \u206612\u2069 ספרות ואמתו את המיקום במפה. רשת ריקה מתחילה ממיקום המחשב."
     ),
-    "e.g. 667000": "למשל \u2066667000\u2069",
-    "e.g. 550500": "למשל \u2066550500\u2069",
+    "Looking up this computer's location...": "מאתר את מיקום המחשב...",
+    "Suggested from this computer: {lat}, {lon}. Check the map.": (
+        "הצעה לפי מיקום המחשב: {lat}, {lon}. בדקו במפה."
+    ),
+    "This computer is outside the operating area. Enter the site grid.": (
+        "המחשב מחוץ לאזור הפעולה. הזינו את רשת האתר."
+    ),
+    "Could not read this computer's location. Enter the site grid.": (
+        "לא ניתן לקרוא את מיקום המחשב. הזינו את רשת האתר."
+    ),
+    "That position is outside the operating area.": "המיקום מחוץ לאזור הפעולה.",
     "Drone takes off next to the antenna": "הרחפן ממריא ליד האנטנה",
     "Easting \u00b7 first 6 digits": "מזרח \u00b7 \u20666\u2069 ספרות ראשונות",
     "Northing \u00b7 last 6 digits": "צפון \u00b7 \u20666\u2069 ספרות אחרונות",
-    "Site altitude \u00b7 above sea level": "גובה האתר \u00b7 מעל פני הים",
-    "Takeoff altitude \u00b7 above sea level": "גובה המראה \u00b7 מעל פני הים",
+    "Site altitude \u00b7 above sea level": "גובה האנטנה \u00b7 מעל פני הים",
+    "Takeoff altitude \u00b7 above sea level": "גובה ההמנח \u00b7 מעל פני הים",
     "SITE COORDINATES": "קואורדינטות אתר",
     "Use the local six-digit easting and northing values.": "השתמשו בערכי מזרח וצפון בני שש ספרות.",
     "\u2714 Found it: {lat}, {lon}  (check the map)": "\u2714 נמצא: {lat}, {lon}  (בדקו במפה)",

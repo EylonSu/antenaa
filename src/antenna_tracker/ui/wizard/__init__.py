@@ -8,6 +8,7 @@ from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.i18n import t
 from antenna_tracker.ui.theme import BORDER, MUTED, TEXT, language_row
+from antenna_tracker.ui.windowing import prepare_desktop_window
 from antenna_tracker.ui.wizard.alignment_page import AlignmentPage
 from antenna_tracker.ui.wizard.connect_page import ConnectPage
 from antenna_tracker.ui.wizard.location_page import LocationPage
@@ -56,7 +57,7 @@ class SetupWizard(QWizard):
         self.setButtonText(QWizard.WizardButton.BackButton, t("Back"))
         self.setButtonText(QWizard.WizardButton.CancelButton, t("Cancel"))
         self.setButtonText(QWizard.WizardButton.FinishButton, t("Finish"))
-        self.resize(1050, 760)
+        prepare_desktop_window(self)
 
     def _on_language(self, code: str) -> None:
         current = "en" if self.config.language == "en" else "he"

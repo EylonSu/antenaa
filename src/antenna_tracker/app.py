@@ -17,6 +17,7 @@ from antenna_tracker.hardware.turret_client import LinkState, TurretClient
 from antenna_tracker.i18n import is_rtl, set_language, t
 from antenna_tracker.ui.main_window import MainWindow
 from antenna_tracker.ui.theme import app_style
+from antenna_tracker.ui.windowing import show_matching
 from antenna_tracker.ui.wizard import SetupWizard
 from antenna_tracker.video.capture import set_video_file_override
 
@@ -75,12 +76,10 @@ class App:
         return PortIdentity(c.port_device or "", c.port_vid, c.port_pid, c.port_serial_number)
 
     def run_wizard(self) -> None:
-        if self.window is not None:
-            self.window.hide()
         self.wizard = SetupWizard(self.config, self.turret, self.dev_mode)
         self.wizard.finished.connect(self._wizard_done)
         self.wizard.language_restart.connect(self.restart_in_language)
-        self.wizard.show()
+        show_matching(self.wizard, self.window)
 
     def _wizard_done(self, result: int) -> None:
         if self._restarting:
@@ -89,7 +88,7 @@ class App:
             if self.window is None:
                 QApplication.quit()
             else:
-                self.window.show()
+                show_matching(self.window, self.wizard)
             return
         save_config(self.config)
         self.show_main()
@@ -103,8 +102,7 @@ class App:
             self.window.language_restart.connect(self.restart_in_language)
         else:
             self.window.apply_site()
-        self.window.show()
-        self.window.raise_()
+        show_matching(self.window, self.wizard)
 
     def restart_in_language(self, language: str) -> None:
         """Save the language, release the turret port, then start the same command."""

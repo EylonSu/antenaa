@@ -62,6 +62,222 @@ def test_wizard_constructs_with_fake_port(qapp, config, turret):
     w.close()
 
 
+def test_setup_and_main_are_the_same_standard_window(qapp, config, turret):
+    """Setup used to be a dialog: no zoom button, and a different size from the main screen."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QWidget
+
+    from antenna_tracker.ui.windowing import default_window_size, show_matching
+
+    wizard = SetupWizard(config, turret, dev_mode=True)
+    window = MainWindow(config, turret, dev_mode=True)
+    try:
+        assert _is_standard_desktop_window(wizard)
+        assert _is_standard_desktop_window(window)
+        assert (wizard.width(), wizard.height()) == default_window_size(wizard)
+        assert (window.width(), window.height()) == (wizard.width(), wizard.height())
+        wizard.show()
+        qapp.processEvents()
+        assert _is_standard_desktop_window(wizard)
+        assert wizard.maximumWidth() > wizard.minimumWidth()
+        assert wizard.maximumHeight() > wizard.minimumHeight()
+    finally:
+        window.shutdown()
+        window.close()
+        wizard.close()
+
+    source = QWidget()
+    source.resize(1100, 720)
+    source.move(80, 90)
+    source.show()
+    qapp.processEvents()
+    target = QWidget()
+    show_matching(target, source)
+    qapp.processEvents()
+    assert not source.isVisible()
+    assert target.isVisible()
+    assert (target.x(), target.y(), target.width(), target.height()) == (
+        source.x(), source.y(), source.width(), source.height())
+    source.close()
+    target.close()
+
+
+def _is_standard_desktop_window(widget) -> bool:
+    from PySide6.QtCore import Qt
+
+    flags = widget.windowFlags()
+    return (int(flags) & 0xFF) == int(Qt.WindowType.Window) and bool(
+        flags & Qt.WindowType.WindowMinimizeButtonHint
+        and flags & Qt.WindowType.WindowMaximizeButtonHint
+        and flags & Qt.WindowType.WindowCloseButtonHint
+    )
+
+
+def test_site_coordinates_stay_east_left_of_north(qapp):
+    """Easting stays left of northing, with a fixed 3 before north, in both directions."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    from antenna_tracker.ui.wizard.location_page import LocationPage
+
+    previous = qapp.layoutDirection()
+    try:
+        for direction in (Qt.LayoutDirection.LeftToRight, Qt.LayoutDirection.RightToLeft):
+            qapp.setLayoutDirection(direction)
+            page = LocationPage(AppConfig(utm_easting="667000", utm_northing="550500"))
+            page.resize(900, 700)
+            page.show()
+            qapp.processEvents()
+            east_l, east_r = _span(page.easting, page)
+            mark_l, mark_r = _span(page.northing_prefix, page)
+            north_l, north_r = _span(page.northing, page)
+            assert east_r <= mark_l < mark_r <= north_l
+            assert north_r - north_l > 40
+            assert isinstance(page.northing_prefix, QLabel)
+            assert page.northing_prefix.text() == "3"
+            assert page.northing_prefix.focusPolicy() == Qt.FocusPolicy.NoFocus
+            page.close()
+            page.deleteLater()
+
+        qapp.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        page = LocationPage(AppConfig())
+        page.resize(900, 700)
+        page.show()
+        qapp.processEvents()
+        page.easting.setFocus()
+        QTest.keyClicks(page.easting, "66700")
+        qapp.processEvents()
+        assert page.easting.text() == "66700"
+        assert page.focusWidget() is page.easting
+        assert page.northing.text() == ""
+        QTest.keyClicks(page.easting, "0")
+        qapp.processEvents()
+        assert page.easting.text() == "667000"
+        assert page.northing.text() == ""
+        assert page.focusWidget() is page.northing
+
+        page.easting.setFocus()
+        page.easting.setSelection(5, 1)
+        QTest.keyClick(page.easting, Qt.Key.Key_1)
+        qapp.processEvents()
+        assert page.easting.text() == "667001"
+        assert page.focusWidget() is page.easting
+        page.close()
+    finally:
+        qapp.setLayoutDirection(previous)
+
+
+def _span(widget, ancestor) -> tuple[int, int]:
+    origin = widget.mapTo(ancestor, widget.rect().topLeft())
+    return origin.x(), origin.x() + widget.width()
+
+
+def test_coordinate_digits_stay_inside_a_wide_field(qapp):
+    """Hebrew placeholders used to push the example number off the left edge when maximized."""
+    from PySide6.QtCore import Qt
+
+    from antenna_tracker.i18n import set_language
+    from antenna_tracker.ui.wizard.location_page import LocationPage
+
+    previous = qapp.layoutDirection()
+    set_language("he")
+    qapp.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    page = LocationPage(AppConfig())
+    try:
+        page.easting.setMinimumWidth(900)
+        page.northing.setMinimumWidth(900)
+        page.resize(2000, 420)
+        page.show()
+        qapp.processEvents()
+        assert page.easting.placeholderText() == "667000"
+        assert page.northing.placeholderText() == "550500"
+        _assert_digits_visible(page.easting, "667000")
+        page.easting.setText("667000")
+        page.northing.setText("550500")
+        qapp.processEvents()
+        _assert_digits_visible(page.easting, "667000")
+        _assert_digits_visible(page.northing, "550500")
+    finally:
+        page.close()
+        set_language("en")
+        qapp.setLayoutDirection(previous)
+
+
+def _assert_digits_visible(field, text: str) -> None:
+    start, end = _glyph_span(field)
+    advance = field.fontMetrics().horizontalAdvance(text) * field.devicePixelRatio()
+    assert start > 6, (start, end, field.width())
+    assert end - start >= advance * 0.9, (start, end, advance)
+
+
+def _glyph_span(widget) -> tuple[int, int]:
+    from PySide6.QtGui import QImage
+
+    image = widget.grab().toImage().convertToFormat(QImage.Format.Format_RGB32)
+    width, height = image.width(), image.height()
+    xs: list[int] = []
+    for y in range(height // 3, 2 * height // 3, 2):
+        for x in range(4, width - 4):
+            color = image.pixelColor(x, y)
+            if color.lightness() > 80 and color.blue() < 230:
+                xs.append(x)
+    assert xs, "no digits drawn"
+    return min(xs), max(xs)
+
+
+def test_wizard_combo_selection_is_readable(qapp, config, turret):
+    """The open list used a cyan highlight with light text, so the current row vanished."""
+    from PySide6.QtGui import QColor
+
+    from antenna_tracker.ui.theme import ACCENT, app_style
+
+    previous = qapp.styleSheet()
+    qapp.setStyleSheet(app_style(False))
+    w = SetupWizard(config, turret, dev_mode=True)
+    try:
+        w.show()
+        qapp.processEvents()
+        combo = w.connect_page.port_combo
+        combo.showPopup()
+        qapp.processEvents()
+        image = combo.view().window().grab().toImage()
+        combo.hidePopup()
+        highlight = _bluest_row_color(image)
+        assert highlight != QColor(ACCENT)
+        assert _luminance(highlight) < 0.2
+    finally:
+        w.close()
+        qapp.setStyleSheet(previous)
+
+
+def _bluest_row_color(image):
+    """Right-edge color of the dropdown row with the strongest blue highlight."""
+    width = image.width()
+    chosen = None
+    for y in range(4, image.height() - 4):
+        edge = image.pixelColor(width - 14, y)
+        score = edge.blue() - edge.red()
+        if chosen is None or score > chosen[0]:
+            chosen = (score, edge)
+    assert chosen is not None
+    return chosen[1]
+
+
+def _luminance(color) -> float:
+    def linear(channel: int) -> float:
+        value = channel / 255
+        if value <= 0.04045:
+            return value / 12.92
+        return ((value + 0.055) / 1.055) ** 2.4
+
+    return (
+        0.2126 * linear(color.red())
+        + 0.7152 * linear(color.green())
+        + 0.0722 * linear(color.blue())
+    )
+
+
 def test_alignment_reference_choice_is_visible(qapp, config, turret):
     from PySide6.QtGui import QColor
 

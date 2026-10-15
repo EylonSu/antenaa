@@ -96,7 +96,15 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     border: 1px solid {BORDER};
     border-radius: 8px;
     padding: 8px 10px;
+}}
+QLineEdit, QSpinBox, QDoubleSpinBox {{
     selection-background-color: {ACCENT};
+    selection-color: #04121c;
+}}
+QComboBox {{
+    color: {TEXT};
+    selection-background-color: #1a3a52;
+    selection-color: {TEXT};
 }}
 QSpinBox, QDoubleSpinBox {{
     {spin_padding}
@@ -155,6 +163,12 @@ QComboBox QAbstractItemView {{
     color: {TEXT};
     border: 1px solid {BORDER};
     selection-background-color: #1a3a52;
+    selection-color: {TEXT};
+    outline: 0;
+}}
+QComboBox QAbstractItemView::item:selected {{
+    background: #1a3a52;
+    color: {TEXT};
 }}
 QCheckBox {{ spacing: 9px; }}
 QCheckBox::indicator {{ width: 18px; height: 18px; }}

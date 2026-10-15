@@ -68,6 +68,20 @@ def in_israel(p: LatLon) -> bool:
     return lat_min <= p.lat <= lat_max and lon_min <= p.lon <= lon_max
 
 
+def utm_fields_for_latlon(lat: float, lon: float) -> tuple[str, str]:
+    """Six-digit easting and northing for a point the site form can accept."""
+    if not in_israel(LatLon(lat, lon)):
+        raise UtmError(t("That position is outside the operating area."))
+    easting_m, northing_m = latlon_to_utm(lat, lon)
+    easting = int(round(easting_m))
+    northing = int(round(northing_m))
+    if not 0 <= easting <= 999_999 or not 3_000_000 <= northing <= 3_999_999:
+        raise UtmError(t("That position is outside the operating area."))
+    fields = (f"{easting:06d}", f"{northing % 1_000_000:06d}")
+    utm_input_to_latlon(*fields)
+    return fields
+
+
 def utm_input_to_latlon(easting: str, northing: str) -> LatLon:
     """Parse and validate user UTM input; raise UtmError with a friendly message."""
     e, n = parse_utm(easting, northing)

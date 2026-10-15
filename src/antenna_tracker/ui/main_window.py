@@ -25,6 +25,7 @@ from antenna_tracker.ui.map_view import SECTOR_RADIUS_M, MapView
 from antenna_tracker.ui.theme import (
     ACCENT, AMBER, BORDER, GREEN, MUTED, SURFACE, TEXT, caption, card, kv_row, language_row, muted, title,
 )
+from antenna_tracker.ui.windowing import default_window_size
 from antenna_tracker.video.capture import VideoPreview
 from antenna_tracker.video.qr_decoder import QrDecoder, Roi
 
@@ -347,8 +348,7 @@ class MainWindow(QMainWindow):
         cv.addWidget(split, 1)
         self.setCentralWidget(central)
         self.overlay = PowerOverlay(split)
-        screen = self.screen().availableGeometry()
-        self.resize(min(1500, screen.width()), min(940, screen.height() - 30))
+        self.resize(*default_window_size(self))
 
         for key, name in ((Qt.Key.Key_Up, "up"), (Qt.Key.Key_Down, "down"),
                           (Qt.Key.Key_Left, "left"), (Qt.Key.Key_Right, "right")):

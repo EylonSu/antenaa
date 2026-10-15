@@ -38,3 +38,14 @@ def test_jerusalem_roundtrip() -> None:
 def test_outside_israel_rejected() -> None:
     with pytest.raises(UtmError, match="outside Israel"):
         coords.utm_input_to_latlon("200000", "513000")
+
+
+def test_utm_fields_roundtrip_known_sites() -> None:
+    for easting, northing in (("711000", "513000"), ("667000", "550500")):
+        point = coords.utm_to_latlon(float(easting), float("3" + northing))
+        assert coords.utm_fields_for_latlon(point.lat, point.lon) == (easting, northing)
+
+
+def test_utm_fields_reject_outside_operating_area() -> None:
+    with pytest.raises(UtmError, match="operating area"):
+        coords.utm_fields_for_latlon(40.7, -74.0)
