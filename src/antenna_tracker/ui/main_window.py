@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
     QScrollArea, QSlider, QSplitter, QVBoxLayout, QWidget,
 )
 
-from antenna_tracker.config import AppConfig, save_config
+from antenna_tracker.config import (
+    AIM_ARC_DEG_MAX, AIM_ARC_DEG_MIN, AppConfig, clamp_aim_arc_deg, save_config,
+)
 from antenna_tracker.geo import pointing
 from antenna_tracker.i18n import is_rtl, ltr, t
 from antenna_tracker.geo.coords import utm_input_to_latlon
@@ -21,12 +23,14 @@ from antenna_tracker.sources.qr_video import QrVideoSource
 from antenna_tracker.sources.simulated import SimulatedSource
 from antenna_tracker.tracking.controller import AntennaSite, Mode, TrackingController, TrackStatus
 from antenna_tracker.ui.alerts import ALERT_POWER, ALERT_QR, ALERT_SPOOF, PowerOverlay
+from antenna_tracker.ui.brand_mark import attach_section_logo
 from antenna_tracker.ui.gauges import CompassGauge, ElevationGauge
 from antenna_tracker.ui.manual_panel import ManualPanel
 from antenna_tracker.ui.map_view import SECTOR_RADIUS_M, MapView
 from antenna_tracker.ui.theme import (
     ACCENT, AMBER, GREEN, MUTED, TEXT, apply_app_stylesheet, caption, card, gps_banner_styles,
-    kv_row, language_row, mode_button_style, qr_indicator_styles, set_ui_theme, side_rail_style,
+    kv_row, language_row, mode_button_style, qr_indicator_styles, set_ui_theme, settings_gear_style,
+    side_rail_style,
     sim_bar_style, theme_row, muted, title,
 )
 from antenna_tracker.ui.windowing import default_window_size
@@ -61,9 +65,13 @@ class SettingsDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(560)
         self.declination = QDoubleSpinBox(minimum=-30, maximum=30, singleStep=0.5, suffix="\u00b0", value=config.declination_deg)
+        self.aim_arc = QDoubleSpinBox(
+            minimum=AIM_ARC_DEG_MIN, maximum=AIM_ARC_DEG_MAX, decimals=0, singleStep=1,
+            suffix="\u00b0", value=clamp_aim_arc_deg(config.aim_arc_deg),
+        )
         self.roi_w = QDoubleSpinBox(minimum=0.05, maximum=1.0, singleStep=0.05, value=config.qr_roi[0])
         self.roi_h = QDoubleSpinBox(minimum=0.05, maximum=1.0, singleStep=0.05, value=config.qr_roi[1])
-        for spin in (self.declination, self.roi_w, self.roi_h):
+        for spin in (self.declination, self.aim_arc, self.roi_w, self.roi_h):
             spin.setMinimumHeight(38)
 
         heading = title(t("Tracker settings"), 24)
@@ -75,6 +83,13 @@ class SettingsDialog(QDialog):
         compass_form.addRow(t("Magnetic declination"), self.declination)
         compass.addLayout(compass_form)
         compass.addWidget(muted(t("Applied only when the alignment direction was measured with a compass."), True))
+
+        arc_card, arc = card(t("AIM ARC"))
+        arc_form = QFormLayout()
+        arc_form.setSpacing(12)
+        arc_form.addRow(t("Arc width"), self.aim_arc)
+        arc.addLayout(arc_form)
+        arc.addWidget(muted(t("Width of the green arc that follows the antenna aim (1\u201390\u00b0)."), True))
 
         qr_card, qr = card(t("QR CAPTURE REGION"))
         qr_form = QFormLayout()
@@ -118,16 +133,19 @@ class SettingsDialog(QDialog):
         lay.addWidget(language_row(config.language, self.language_restart.emit))
         lay.addWidget(theme_row(config.ui_theme, self._set_ui_theme))
         lay.addWidget(compass_card)
+        lay.addWidget(arc_card)
         lay.addWidget(qr_card)
         lay.addWidget(alerts_card)
         lay.addWidget(rerun)
         lay.addWidget(buttons)
+        attach_section_logo(self)
 
     def _set_ui_theme(self, theme: str) -> None:
         self._ui_theme = theme
 
     def apply(self, config: AppConfig) -> None:
         config.declination_deg = self.declination.value()
+        config.aim_arc_deg = clamp_aim_arc_deg(self.aim_arc.value())
         config.qr_roi = (self.roi_w.value(), self.roi_h.value())
         config.ui_theme = self._ui_theme
         config.alert_power = self.alert_power.isChecked()
@@ -283,7 +301,9 @@ class MainWindow(QMainWindow):
 
         self.gear = QPushButton("\u2699")
         self.gear.setToolTip(t("Tracker settings"))
-        self.gear.setFixedSize(38, 38)
+        self.gear.setFixedSize(40, 40)
+        self.gear.setStyleSheet(settings_gear_style())
+        self.gear.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         brand_row = QHBoxLayout()
         brand_row.setSpacing(8)
         brand = QLabel("ANTENAA")
@@ -365,6 +385,7 @@ class MainWindow(QMainWindow):
         cv.addWidget(split, 1)
         self.setCentralWidget(central)
         self.overlay = PowerOverlay(split)
+        attach_section_logo(self)
         self.overlay.set_sound_enabled(self.config.alert_sound)
         self.resize(*default_window_size(self))
 
@@ -422,9 +443,10 @@ class MainWindow(QMainWindow):
         self.controller.set_site(site)
         self.map.set_antenna(p.lat, p.lon, 14)
         self.map.set_sector(p.lat, p.lon, site.ref_az_true)
-        pan_tilt = self.turret.last_position or (90, 90)
+        pan_tilt = self.turret.last_position or (pointing.PAN_CENTER, pointing.TILT_LEVEL)
         self.map.set_antenna_pose(site.ref_az_true, pan_tilt[0], pan_tilt[1])
         self._draw_actual_line(*pan_tilt)
+        self._draw_aim_arc(pan_tilt[0])
         self.video.set_device(cfg.video_device_id)
         self.qr_source.fields = cfg.qr_fields
         self.decoder.roi = Roi(*cfg.qr_roi)
@@ -626,10 +648,17 @@ class MainWindow(QMainWindow):
         end = pointing.destination(site.lat, site.lon, az, self._actual_line_length_m(site))
         self.map.set_actual([[site.lat, site.lon], list(end)])
 
+    def _draw_aim_arc(self, pan: float) -> None:
+        site = self.controller.site
+        if site is None:
+            return
+        self.map.set_aim_arc(site.lat, site.lon, site.ref_az_true, pan, self.config.aim_arc_deg)
+
     def _on_position(self, pan: int, tilt: int) -> None:
         site = self.controller.site
         if site is not None:
             self._draw_actual_line(pan, tilt)
+            self._draw_aim_arc(pan)
             self.map.set_antenna_pose(site.ref_az_true, pan, tilt)
         self._update_gauges()
         self.manual.refresh()
@@ -727,6 +756,8 @@ class MainWindow(QMainWindow):
                 _, gps_back = gps_banner_styles()
                 self.gps_banner.setStyleSheet(gps_back)
         self.overlay.apply_theme()
+        self.compass.update()
+        self.elevation.update()
         status = (self.controller.status or TrackStatus.NO_POSITION).value
         self._on_status(status)
 

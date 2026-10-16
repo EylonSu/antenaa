@@ -465,6 +465,10 @@ def mode_button_style(color: str) -> str:
     )
 
 
+def settings_gear_style() -> str:
+    return "font-size: 24px; padding: 0;"
+
+
 def sim_bar_style() -> str:
     p = _ACTIVE
     return f"QWidget#simBar {{ background: {p.sim_bar_bg}; border-top: 1px solid {p.border}; }}"

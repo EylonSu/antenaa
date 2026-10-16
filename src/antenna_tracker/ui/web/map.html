@@ -265,12 +265,22 @@ window.api = {
     if (zoom) map.setView([lat, lon], zoom);
   },
   setAntennaPose: function (refAz, az, el, pan, tilt) { setTurretPose(refAz, az, el, pan, tilt); },
-  setSector: function (outerPts, innerPts) {
+  setSector: function (outerPts) {
     if (!map) return;
     if (outer) map.removeLayer(outer);
-    if (inner) map.removeLayer(inner);
     outer = L.polygon(outerPts, { color: "#35d07f", weight: 1, fillColor: "#35d07f", fillOpacity: 0.12 }).addTo(map);
-    inner = L.polygon(innerPts, { color: "#35d07f", weight: 1, fillColor: "#35d07f", fillOpacity: 0.22 }).addTo(map);
+    outer.bringToBack();
+  },
+  setAimArc: function (pts) {
+    if (!map) return;
+    if (!inner) {
+      inner = L.polygon(pts, { color: "#35d07f", weight: 1, fillColor: "#35d07f", fillOpacity: 0.22 }).addTo(map);
+    } else {
+      inner.setLatLngs(pts);
+    }
+    if (outer) outer.bringToBack();
+    if (recLine) recLine.bringToFront();
+    if (actLine) actLine.bringToFront();
   },
   setDrone: function (lat, lon, draggable) {
     if (!map) return;

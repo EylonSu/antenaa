@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QUrl, Signal, Slot
@@ -25,7 +26,6 @@ def _install_tile_handler() -> None:
         _tile_handler = tiles.TileSchemeHandler(profile)
         profile.installUrlSchemeHandler(tiles.SCHEME, _tile_handler)
 SECTOR_RADIUS_M = 11000.0
-FULL_ELEVATION_PANS = (70, 110)
 
 
 class MapBridge(QObject):
@@ -51,6 +51,22 @@ def sector_polygon(lat: float, lon: float, ref_az_true: float, pan_lo: int, pan_
     pts = [[lat, lon]]
     for pan in range(pan_lo, pan_hi + 1, 5):
         az, _ = pointing.pan_tilt_to_az_el(pan, pointing.TILT_LEVEL, ref_az_true)
+        pts.append(list(pointing.destination(lat, lon, az, radius_m)))
+    return pts
+
+
+def aim_arc_polygon(
+    lat: float, lon: float, ref_az_true: float, pan: float, width_deg: float,
+    radius_m: float = SECTOR_RADIUS_M,
+) -> list[list[float]]:
+    """Wedge of ``width_deg`` centered on the antenna's current pan."""
+    half = width_deg / 2.0
+    lo, hi = pan - half, pan + half
+    count = max(1, math.ceil((hi - lo) / 1.0 - 1e-9))
+    pts = [[lat, lon]]
+    for i in range(count + 1):
+        sample = lo + (hi - lo) * i / count
+        az, _ = pointing.pan_tilt_to_az_el(sample, pointing.TILT_LEVEL, ref_az_true)
         pts.append(list(pointing.destination(lat, lon, az, radius_m)))
     return pts
 
@@ -112,8 +128,12 @@ class MapView(QWebEngineView):
 
     def set_sector(self, lat: float, lon: float, ref_az_true: float) -> None:
         outer = sector_polygon(lat, lon, ref_az_true, pointing.PAN_MIN, pointing.PAN_MAX)
-        inner = sector_polygon(lat, lon, ref_az_true, *FULL_ELEVATION_PANS)
-        self._call("setSector", outer, inner)
+        self._call("setSector", outer)
+
+    def set_aim_arc(
+        self, lat: float, lon: float, ref_az_true: float, pan: float, width_deg: float,
+    ) -> None:
+        self._call("setAimArc", aim_arc_polygon(lat, lon, ref_az_true, pan, width_deg))
 
     def set_drone(self, lat: float, lon: float, draggable: bool = True) -> None:
         self._call("setDrone", lat, lon, draggable)

@@ -21,6 +21,11 @@ _HE: dict[str, str] = {
     "Applied only when the alignment direction was measured with a compass.": (
         "חל רק כשהכיוון נמדד במצפן."
     ),
+    "AIM ARC": "קשת כיוון",
+    "Arc width": "רוחב הקשת",
+    "Width of the green arc that follows the antenna aim (1\u201390\u00b0).": (
+        "רוחב הקשת הירוקה שעוקבת אחרי כיוון האנטנה (\u20661\u201390\u00b0\u2069)."
+    ),
     "QR CAPTURE REGION": "אזור קליטת QR",
     "ALERTS": "התראות",
     "Alert when the tracker has no power": "התראה כשאין מתח לעוקב",

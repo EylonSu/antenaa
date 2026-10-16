@@ -52,6 +52,7 @@ def test_map_html_is_packaged():
     assert (MAP_HTML.parent / "vendor" / "leaflet.css").is_file()
     assert (MAP_HTML.parent / "vendor" / "three.min.js").is_file()
     assert "three.min.js" in text and "setAntennaPose" in text
+    assert "setAimArc" in text
 
 
 def test_wizard_constructs_with_fake_port(qapp, config, turret):
@@ -388,8 +389,10 @@ def test_manual_panel_greys_out_unreachable(qapp, config, turret, wait_until):
 def test_settings_dialog_applies(qapp, config, tmp_path):
     fresh = AppConfig()
     assert fresh.alert_power and fresh.alert_qr_read and fresh.alert_spoofing and fresh.alert_sound
+    assert fresh.aim_arc_deg == 10
     dlg = SettingsDialog(config)
     dlg.declination.setValue(7.5)
+    dlg.aim_arc.setValue(18)
     dlg.roi_w.setValue(0.4)
     dlg.roi_h.setValue(0.6)
     dlg.alert_power.setChecked(False)
@@ -398,6 +401,7 @@ def test_settings_dialog_applies(qapp, config, tmp_path):
     dlg.alert_sound.setChecked(False)
     dlg.apply(config)
     assert config.declination_deg == 7.5
+    assert config.aim_arc_deg == 18
     assert config.qr_roi == (0.4, 0.6)
     assert not config.alert_power
     assert not config.alert_qr_read
@@ -410,7 +414,12 @@ def test_settings_dialog_applies(qapp, config, tmp_path):
     assert loaded.alert_qr_read is False
     assert loaded.alert_spoofing is False
     assert loaded.alert_sound is False
+    assert loaded.aim_arc_deg == 18
     assert load_config(tmp_path / "missing.json").alert_power is True
+    path.write_text('{"aim_arc_deg": 400}', encoding="utf-8")
+    assert load_config(path).aim_arc_deg == 90
+    path.write_text('{"aim_arc_deg": "nope"}', encoding="utf-8")
+    assert load_config(path).aim_arc_deg == 10
 
 
 GOOD = "DRN-7|32.0900000|34.7900000|0|0|90.0|120.0|0|0|0|0|0|850|-1"
@@ -651,6 +660,8 @@ def test_settings_groups_declination_crop_and_setup(qapp, config):
     labels = [label.text() for label in dlg.findChildren(QLabel)]
     assert "COMPASS CALIBRATION" in labels
     assert "Magnetic declination" in labels
+    assert "AIM ARC" in labels
+    assert "Arc width" in labels
     assert "QR CAPTURE REGION" in labels
     assert "Frame width" in labels and "Frame height" in labels
     buttons = [button.text() for button in dlg.findChildren(QPushButton)]
@@ -668,9 +679,40 @@ def test_settings_groups_declination_crop_and_setup(qapp, config):
 
 
 def test_position_update_sets_antenna_pose(qapp, config, turret):
+    from antenna_tracker.ui.map_view import aim_arc_polygon
+
     w = MainWindow(config, turret, dev_mode=True)
     calls = []
     w.map._call = lambda fn, *a: calls.append((fn, a))
     w._on_position(100, 95)
     assert any(fn == "setAntennaPose" and a[3:] == (100, 95) for fn, a in calls)
+    site = w.controller.site
+    assert site is not None
+    expected = aim_arc_polygon(site.lat, site.lon, site.ref_az_true, 100, w.config.aim_arc_deg)
+    arcs = [a for fn, a in calls if fn == "setAimArc"]
+    assert arcs and arcs[-1] == (expected,)
     w.close()
+
+
+def test_aim_arc_follows_pan_and_coverage_stays_170():
+    from antenna_tracker.geo import pointing
+    from antenna_tracker.ui.map_view import aim_arc_polygon, sector_polygon
+
+    lat, lon, ref = 32.0, 34.8, 45.0
+    coverage = sector_polygon(lat, lon, ref, pointing.PAN_MIN, pointing.PAN_MAX, radius_m=1000.0)
+    start = pointing.az_el_dist(lat, lon, 0, coverage[1][0], coverage[1][1], 0)[0]
+    end = pointing.az_el_dist(lat, lon, 0, coverage[-1][0], coverage[-1][1], 0)[0]
+    assert pointing.wrap180(end - start) == pytest.approx(170, abs=0.05)
+
+    pan, width = 120.0, 10.0
+    arc = aim_arc_polygon(lat, lon, ref, pan, width, radius_m=1000.0)
+    assert arc[0] == [lat, lon]
+    center, _ = pointing.pan_tilt_to_az_el(pan, pointing.TILT_LEVEL, ref)
+    edge_az = [
+        pointing.az_el_dist(lat, lon, 0, pt[0], pt[1], 0)[0] for pt in arc[1:]
+    ]
+    assert pointing.wrap180(edge_az[0] - (center - width / 2)) == pytest.approx(0, abs=0.05)
+    assert pointing.wrap180(edge_az[-1] - (center + width / 2)) == pytest.approx(0, abs=0.05)
+    assert pointing.wrap180(edge_az[-1] - edge_az[0]) == pytest.approx(width, abs=0.05)
+    # The old marker sat on mechanical center (pan 90). A pan of 120 must leave that behind.
+    assert abs(pointing.wrap180(edge_az[len(edge_az) // 2] - center)) < 0.05

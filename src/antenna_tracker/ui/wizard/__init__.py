@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QWizard
 from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.i18n import t
+from antenna_tracker.ui.brand_mark import attach_section_logo
 from antenna_tracker.ui.theme import BG, BORDER, MUTED, TEXT, language_row, wizard_stylesheet
 from antenna_tracker.ui.windowing import prepare_desktop_window
 from antenna_tracker.ui.wizard.alignment_page import AlignmentPage
@@ -47,6 +48,7 @@ class SetupWizard(QWizard):
         self.setButtonText(QWizard.WizardButton.CancelButton, t("Cancel"))
         self.setButtonText(QWizard.WizardButton.FinishButton, t("Finish"))
         prepare_desktop_window(self)
+        attach_section_logo(self)
 
     def _on_language(self, code: str) -> None:
         current = "en" if self.config.language == "en" else "he"

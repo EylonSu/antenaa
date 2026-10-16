@@ -28,6 +28,23 @@ class QrFields:
 # (lat_min, lat_max, lon_min, lon_max): roughly Israel
 ISRAEL_BOUNDS: tuple[float, float, float, float] = (29.3, 33.5, 34.0, 36.0)
 
+# Width of the map wedge that follows the antenna's current aim.
+AIM_ARC_DEG_DEFAULT = 10.0
+AIM_ARC_DEG_MIN = 1.0
+AIM_ARC_DEG_MAX = 90.0
+
+
+def clamp_aim_arc_deg(value: object, default: float = AIM_ARC_DEG_DEFAULT) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return default
+    try:
+        deg = float(value)
+    except ValueError:
+        return default
+    if deg != deg or deg == float("inf") or deg == float("-inf"):
+        return default
+    return min(AIM_ARC_DEG_MAX, max(AIM_ARC_DEG_MIN, deg))
+
 
 @dataclass
 class AppConfig:
@@ -60,6 +77,7 @@ class AppConfig:
     alert_qr_read: bool = True
     alert_spoofing: bool = True
     alert_sound: bool = True
+    aim_arc_deg: float = AIM_ARC_DEG_DEFAULT
 
     @property
     def effective_takeoff_alt_amsl(self) -> float:
@@ -85,11 +103,14 @@ def load_config(path: Path | None = None) -> AppConfig:
         return AppConfig()
     known = {f.name for f in fields(AppConfig)}
     kw = {k: v for k, v in data.items() if k in known}
+    raw_aim_arc = kw.pop("aim_arc_deg", None)
     qf = kw.pop("qr_fields", None)
     for k in ("qr_bounds", "qr_roi"):
         if isinstance(kw.get(k), list):
             kw[k] = tuple(kw[k])
     cfg = AppConfig(**kw)
+    if raw_aim_arc is not None:
+        cfg.aim_arc_deg = clamp_aim_arc_deg(raw_aim_arc)
     if isinstance(qf, dict):
         names = {f.name for f in fields(QrFields)}
         cfg.qr_fields = QrFields(**{k: v for k, v in qf.items() if k in names})
