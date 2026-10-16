@@ -233,9 +233,10 @@ def test_wizard_combo_selection_is_readable(qapp, config, turret):
     """The open list used a cyan highlight with light text, so the current row vanished."""
     from PySide6.QtGui import QColor
 
-    from antenna_tracker.ui.theme import ACCENT, app_style
+    from antenna_tracker.ui.theme import ACCENT, app_style, set_ui_theme
 
     previous = qapp.styleSheet()
+    set_ui_theme("dark")
     qapp.setStyleSheet(app_style(False))
     w = SetupWizard(config, turret, dev_mode=True)
     try:
@@ -297,9 +298,10 @@ def _luminance(color) -> float:
 def test_alignment_reference_choice_is_visible(qapp, config, turret):
     from PySide6.QtGui import QColor
 
-    from antenna_tracker.ui.theme import ACCENT, RAISED, app_style
+    from antenna_tracker.ui.theme import ACCENT, RAISED, app_style, set_ui_theme
 
     previous = qapp.styleSheet()
+    set_ui_theme("dark")
     qapp.setStyleSheet(app_style(False))
     w = SetupWizard(config, turret, dev_mode=True)
     try:

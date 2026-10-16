@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWizard
 from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.i18n import t
-from antenna_tracker.ui.theme import BORDER, MUTED, TEXT, language_row
+from antenna_tracker.ui.theme import BG, BORDER, MUTED, TEXT, language_row, wizard_stylesheet
 from antenna_tracker.ui.windowing import prepare_desktop_window
 from antenna_tracker.ui.wizard.alignment_page import AlignmentPage
 from antenna_tracker.ui.wizard.connect_page import ConnectPage
@@ -28,23 +28,12 @@ class SetupWizard(QWizard):
         self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
         self.setOption(QWizard.WizardOption.NoCancelButtonOnLastPage, True)
         pal = self.palette()
-        pal.setColor(QPalette.ColorRole.Window, QColor("#05080e"))
+        pal.setColor(QPalette.ColorRole.Window, QColor(BG))
         pal.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
         pal.setColor(QPalette.ColorRole.Text, QColor(TEXT))
         pal.setColor(QPalette.ColorRole.Mid, QColor(BORDER))
         self.setPalette(pal)
-        self.setStyleSheet(f"""
-            QWizard {{ background: #05080e; border: none; }}
-            QWizardPage {{ background: #05080e; border: none; }}
-            QLabel#qt_wizard_title {{
-                color: {TEXT}; font-size: 22px; font-weight: 800; background: transparent; border: none;
-            }}
-            QLabel#qt_wizard_subtitle {{
-                color: {MUTED}; font-size: 14px; background: transparent; border: none;
-            }}
-            QWizard QFrame {{ border: none; }}
-            QWizard QPushButton {{ min-width: 100px; padding: 10px 22px; }}
-        """)
+        self.setStyleSheet(wizard_stylesheet())
         self.connect_page = ConnectPage(config, turret, dev_mode)
         self.location_page = LocationPage(config)
         self.alignment_page = AlignmentPage(config, turret)

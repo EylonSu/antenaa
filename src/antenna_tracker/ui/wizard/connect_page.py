@@ -12,7 +12,7 @@ from antenna_tracker.hardware import port_finder
 from antenna_tracker.hardware.port_finder import PortInfo, TestResult
 from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.i18n import t
-from antenna_tracker.ui.theme import ACCENT, MUTED, card, muted
+from antenna_tracker.ui.theme import ACCENT, BG, BORDER, MUTED, card, muted
 from antenna_tracker.video.capture import VideoPreview, list_video_inputs
 
 BIG = "font-size: 15px; padding: 8px;"
@@ -48,7 +48,7 @@ class ConnectPage(QWizardPage):
         self.video_combo.currentIndexChanged.connect(self._video_changed)
         self.preview = VideoPreview()
         self.preview.setFixedSize(384, 216)
-        self.preview.setStyleSheet("border: 1px solid #1d2b42; border-radius: 8px; background: #050b13;")
+        self.preview.setStyleSheet(f"border: 1px solid {BORDER}; border-radius: 8px; background: {BG};")
 
         port_row = QHBoxLayout()
         port_row.addWidget(self.port_combo, 1)

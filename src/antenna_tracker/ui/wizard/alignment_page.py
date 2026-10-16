@@ -8,21 +8,12 @@ from PySide6.QtWidgets import (
 from antenna_tracker.config import AppConfig
 from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.i18n import is_rtl, t
-from antenna_tracker.ui.theme import ACCENT, BORDER, GREEN, MUTED, RAISED, TEXT, card
+from antenna_tracker.ui.theme import ACCENT, GREEN, MUTED, TEXT, active_palette, card, reference_toggle_style
 
 INSTRUCTIONS = (
     "<b>1</b> &nbsp; Center the turret using the button below.<br><br>"
     "<b>2</b> &nbsp; Rotate the entire base toward a known direction, ideally the flight area.<br><br>"
     "<b>3</b> &nbsp; Enter that direction (0° north, 90° east)."
-)
-
-# Checked state has to be explicit: the app theme styles pressed buttons, not selected ones.
-_REF_STYLE = (
-    f"QPushButton {{ font-weight: 700; color: {MUTED}; background: {RAISED}; "
-    f"border: 1px solid {BORDER}; border-radius: 8px; }}"
-    f"QPushButton:hover {{ color: {TEXT}; background: #142136; border: 1px solid #2c425f; }}"
-    f"QPushButton:checked {{ color: #04121c; background: {ACCENT}; border: 1px solid {ACCENT}; }}"
-    f"QPushButton:checked:hover {{ color: #04121c; background: #7ce4ff; border: 1px solid #7ce4ff; }}"
 )
 _REF_SOURCES = (
     "\u2714 Map \u2014 true north.",
@@ -54,7 +45,7 @@ class AlignmentPage(QWizardPage):
             b = QPushButton(text, checkable=True)
             b.setMinimumHeight(38)
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            b.setStyleSheet(_REF_STYLE)
+            b.setStyleSheet(reference_toggle_style())
             self.ref_group.addButton(b, i)
             ref_row.addWidget(b)
         self.ref_group.button(1 if config.ref_is_magnetic else 0).setChecked(True)
@@ -66,9 +57,11 @@ class AlignmentPage(QWizardPage):
 
         step_spacing = "0" if is_rtl() else "2px"
         illo = QLabel(t("CENTER  →  AIM  →  CONFIRM"), alignment=Qt.AlignmentFlag.AlignCenter)
+        p = active_palette()
         illo.setStyleSheet(
-            f"font-size: 15px; color: #46d9ff; font-weight: 800; letter-spacing: {step_spacing};")
-        text = QLabel(t(INSTRUCTIONS), wordWrap=True, styleSheet="font-size: 15px; color: #c9d5e5;")
+            f"font-size: 15px; color: {ACCENT}; font-weight: 800; letter-spacing: {step_spacing};")
+        text = QLabel(t(INSTRUCTIONS), wordWrap=True,
+                      styleSheet=f"font-size: 15px; color: {p.instruction};")
         az_row = QHBoxLayout()
         az_row.addWidget(QLabel(t("Center direction"), styleSheet="font-size: 15px; font-weight: bold;"))
         az_row.addWidget(self.azimuth)

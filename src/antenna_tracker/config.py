@@ -7,6 +7,7 @@ from pathlib import Path
 from platformdirs import user_config_dir
 
 from antenna_tracker.i18n import normalized_language
+from antenna_tracker.ui.theme import normalized_ui_theme
 
 APP_NAME = "AntennaTracker"
 CONFIG_FILE = "config.json"
@@ -54,6 +55,7 @@ class AppConfig:
     qr_roi: tuple[float, float] = (0.25, 0.35)  # fraction of width, height from top-left
     map_basemap: str = "osm"
     language: str = "he"
+    ui_theme: str = "light"
     alert_power: bool = True
     alert_qr_read: bool = True
     alert_spoofing: bool = True
@@ -94,6 +96,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     if cfg.map_basemap not in ("osm", "satellite"):
         cfg.map_basemap = "osm"
     cfg.language = normalized_language(cfg.language)
+    cfg.ui_theme = normalized_ui_theme(cfg.ui_theme)
     return cfg
 
 

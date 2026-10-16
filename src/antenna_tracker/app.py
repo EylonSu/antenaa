@@ -16,7 +16,7 @@ from antenna_tracker.hardware.port_finder import PortIdentity
 from antenna_tracker.hardware.turret_client import LinkState, TurretClient
 from antenna_tracker.i18n import is_rtl, set_language, t
 from antenna_tracker.ui.main_window import MainWindow
-from antenna_tracker.ui.theme import app_style
+from antenna_tracker.ui.theme import apply_app_stylesheet, set_ui_theme
 from antenna_tracker.ui.windowing import show_matching
 from antenna_tracker.ui.wizard import SetupWizard
 from antenna_tracker.video.capture import set_video_file_override
@@ -135,9 +135,10 @@ def main(argv: list[str] | None = None) -> int:
     qapp = QApplication(argv)
     config = load_config()
     set_language(config.language)
+    set_ui_theme(config.ui_theme)
     qapp.setLayoutDirection(
         Qt.LayoutDirection.RightToLeft if is_rtl() else Qt.LayoutDirection.LeftToRight)
-    qapp.setStyleSheet(app_style(is_rtl()))
+    apply_app_stylesheet(qapp)
     qapp.setApplicationName("antenaa")
     qapp.setWindowIcon(QIcon(str(ICON_PATH)))
     dev_mode = args.dev or args.demo or config.developer_mode

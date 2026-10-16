@@ -13,51 +13,91 @@ from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from antenna_tracker.i18n import is_rtl, t
+from antenna_tracker.ui.theme import active_palette
 
 ALERT_POWER, ALERT_SPOOF, ALERT_QR = "power", "spoof", "qr"
 _PRIORITY = (ALERT_POWER, ALERT_SPOOF, ALERT_QR)
 SNOOZE_MS = 15 * 60 * 1000
 
-OVERLAY_BASE = """
+BADGE_BASE = "font-size: 22px; border-radius: 28px; min-width: 56px; min-height: 56px; max-width: 56px; max-height: 56px;"
+
+
+def _overlay_base() -> str:
+    return """
 QWidget#PowerOverlay { border: none; }
 QWidget#PowerOverlay QLabel { border: none; background: transparent; }
 """
 
-LOST_STYLE = OVERLAY_BASE + "QWidget#PowerOverlay { background: rgba(10, 7, 13, 218); }"
-BACK_STYLE = OVERLAY_BASE + "QWidget#PowerOverlay { background: rgba(5, 15, 12, 195); }"
 
-CARD_STYLE = """
-QFrame#PowerCard {
-    background: #101b2e;
-    border: 1px solid #2b3a52;
+def _lost_style() -> str:
+    p = active_palette()
+    return _overlay_base() + f"QWidget#PowerOverlay {{ background: {p.overlay_lost}; }}"
+
+
+def _back_style() -> str:
+    p = active_palette()
+    return _overlay_base() + f"QWidget#PowerOverlay {{ background: {p.overlay_back}; }}"
+
+
+def _card_style() -> str:
+    p = active_palette()
+    return f"""
+QFrame#PowerCard {{
+    background: {p.alert_card_bg};
+    border: 1px solid {p.alert_card_border};
     border-radius: 18px;
-}
-QFrame#PowerCard QLabel { border: none; background: transparent; }
-QFrame#PowerCard QPushButton {
+}}
+QFrame#PowerCard QLabel {{ border: none; background: transparent; }}
+QFrame#PowerCard QPushButton {{
     background: transparent;
-    border: 1px solid #5b6b84;
+    border: 1px solid {p.alert_btn_border};
     border-radius: 10px;
-    color: #e8eef7;
+    color: {p.text};
     font-size: 14px;
     font-weight: 600;
     padding: 10px 22px;
-}
-QFrame#PowerCard QPushButton:hover { border-color: #7f93ab; background: #142136; }
-QFrame#PowerCard QPushButton:pressed { background: #0b1626; }
+}}
+QFrame#PowerCard QPushButton:hover {{ border-color: {p.muted}; background: {p.alert_btn_hover_bg}; }}
+QFrame#PowerCard QPushButton:pressed {{ background: {p.alert_btn_pressed_bg}; }}
 """
 
-BADGE_BASE = "font-size: 22px; border-radius: 28px; min-width: 56px; min-height: 56px; max-width: 56px; max-height: 56px;"
-BADGE_LOST = BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 26); border: 1px solid #8b394b;"
-BADGE_LOST_DIM = BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 12); border: 1px solid #5c2a36;"
-BADGE_OK = BADGE_BASE + "color: #6ee7a4; background: rgba(53, 208, 127, 26); border: 1px solid #286b4d;"
+
+def _badge_lost() -> str:
+    return BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 26); border: 1px solid #8b394b;"
+
+
+def _badge_lost_dim() -> str:
+    return BADGE_BASE + "color: #ff8d99; background: rgba(255, 93, 108, 12); border: 1px solid #5c2a36;"
+
+
+def _badge_ok() -> str:
+    return BADGE_BASE + "color: #6ee7a4; background: rgba(53, 208, 127, 26); border: 1px solid #286b4d;"
+
 
 def _eyebrow_style(ok: bool) -> str:
     color = "#6ee7a4" if ok else "#ff8d99"
     spacing = "0" if is_rtl() else "3px"
     return f"font-size: 11px; font-weight: 800; letter-spacing: {spacing}; color: {color};"
-TITLE_STYLE = "font-size: 26px; font-weight: 700; color: #f1f5f9;"
-DETAIL_STYLE = "font-size: 14px; color: #aebdcc;"
-REASON_STYLE = "font-size: 12px; color: #6d7f94;"
+
+
+def _title_style() -> str:
+    p = active_palette()
+    return f"font-size: 26px; font-weight: 700; color: {p.alert_title};"
+
+
+def _detail_style() -> str:
+    p = active_palette()
+    return f"font-size: 14px; color: {p.alert_detail};"
+
+
+def _reason_style() -> str:
+    p = active_palette()
+    return f"font-size: 12px; color: {p.alert_hint};"
+
+
+def _hint_style() -> str:
+    p = active_palette()
+    return f"font-size: 12px; color: {p.alert_hint};"
 
 
 def _harsh_wav() -> bytes:
@@ -106,13 +146,13 @@ class PowerOverlay(QWidget):
         self.eyebrow.setStyleSheet(_eyebrow_style(False))
         self.title = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.title.setWordWrap(True)
-        self.title.setStyleSheet(TITLE_STYLE)
+        self.title.setStyleSheet(_title_style())
         self.detail = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.detail.setWordWrap(True)
-        self.detail.setStyleSheet(DETAIL_STYLE)
+        self.detail.setStyleSheet(_detail_style())
         self.reason = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.reason.setWordWrap(True)
-        self.reason.setStyleSheet(REASON_STYLE)
+        self.reason.setStyleSheet(_reason_style())
         self.hide_btn = QPushButton(t("Hide for 15 min"))
         self.silence_btn = QPushButton(t("Silence for 15 min"))
         for button, slot in ((self.hide_btn, self.hide_current), (self.silence_btn, self.silence)):
@@ -120,11 +160,12 @@ class PowerOverlay(QWidget):
             button.clicked.connect(slot)
         self.hint = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         self.hint.setWordWrap(True)
-        self.hint.setStyleSheet("font-size: 12px; color: #6d7f94;")
+        self.hint.setStyleSheet(_hint_style())
 
         card = QFrame()
         card.setObjectName("PowerCard")
-        card.setStyleSheet(CARD_STYLE)
+        self._card = card
+        card.setStyleSheet(_card_style())
         card.setMinimumWidth(420)
         card.setMaximumWidth(540)
         card_lay = QVBoxLayout(card)
@@ -210,6 +251,21 @@ class PowerOverlay(QWidget):
         if not self._restored:
             self._apply()
 
+    def apply_theme(self) -> None:
+        self._card.setStyleSheet(_card_style())
+        self.title.setStyleSheet(_title_style())
+        self.detail.setStyleSheet(_detail_style())
+        self.reason.setStyleSheet(_reason_style())
+        self.hint.setStyleSheet(_hint_style())
+        if self._restored:
+            self.setStyleSheet(_back_style())
+            self.badge.setStyleSheet(_badge_ok())
+            self.eyebrow.setStyleSheet(_eyebrow_style(True))
+        elif self.isVisible() and self._shown_kind is not None:
+            self.setStyleSheet(_lost_style())
+            self.badge.setStyleSheet(_badge_lost() if self._pulse_on else _badge_lost_dim())
+            self.eyebrow.setStyleSheet(_eyebrow_style(False))
+
     def set_active(self, kind: str, active: bool, reason: str = "", *, restored: bool = False) -> None:
         if kind not in _PRIORITY:
             return
@@ -285,10 +341,10 @@ class PowerOverlay(QWidget):
             self._stop_alarm()
 
     def _render_alert(self, kind: str, reason: str) -> None:
-        self.setStyleSheet(LOST_STYLE)
+        self.setStyleSheet(_lost_style())
         badge, eyebrow, title, detail, hint = _ALERT_TEXT[kind]
         self.badge.setText(badge)
-        self.badge.setStyleSheet(BADGE_LOST)
+        self.badge.setStyleSheet(_badge_lost())
         self._pulse_on = True
         self.eyebrow.setText(t(eyebrow))
         self.eyebrow.setStyleSheet(_eyebrow_style(False))
@@ -307,9 +363,9 @@ class PowerOverlay(QWidget):
         self._shown_kind = None
         self._shown_reason = ""
         self._stop_alarm()
-        self.setStyleSheet(BACK_STYLE)
+        self.setStyleSheet(_back_style())
         self.badge.setText("\u2713")
-        self.badge.setStyleSheet(BADGE_OK)
+        self.badge.setStyleSheet(_badge_ok())
         self.eyebrow.setText(t("POWER RESTORED"))
         self.eyebrow.setStyleSheet(_eyebrow_style(True))
         self.title.setText(t("Tracker is back"))
@@ -328,7 +384,7 @@ class PowerOverlay(QWidget):
     def _beat(self) -> None:
         self._play_tone()
         self._pulse_on = not self._pulse_on
-        self.badge.setStyleSheet(BADGE_LOST if self._pulse_on else BADGE_LOST_DIM)
+        self.badge.setStyleSheet(_badge_lost() if self._pulse_on else _badge_lost_dim())
 
     def _play_tone(self) -> None:
         effect = self._effect

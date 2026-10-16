@@ -25,7 +25,9 @@ from antenna_tracker.ui.gauges import CompassGauge, ElevationGauge
 from antenna_tracker.ui.manual_panel import ManualPanel
 from antenna_tracker.ui.map_view import SECTOR_RADIUS_M, MapView
 from antenna_tracker.ui.theme import (
-    ACCENT, AMBER, BORDER, GREEN, MUTED, SURFACE, TEXT, caption, card, kv_row, language_row, muted, title,
+    ACCENT, AMBER, GREEN, MUTED, TEXT, apply_app_stylesheet, caption, card, gps_banner_styles,
+    kv_row, language_row, mode_button_style, qr_indicator_styles, set_ui_theme, side_rail_style,
+    sim_bar_style, theme_row, muted, title,
 )
 from antenna_tracker.ui.windowing import default_window_size
 from antenna_tracker.video.capture import VideoPreview
@@ -41,10 +43,6 @@ PILL = {
     TrackStatus.NO_GPS: ("NO DRONE GPS", "#e65100"),
 }
 SOURCE_QR, SOURCE_SIM = "qr", "sim"
-NO_GPS_STYLE = "background: #4a3410; color: #ffd57b; border: 1px solid #8d6724; border-radius: 8px;"
-GPS_BACK_STYLE = "background: #123c2b; color: #7ce8ad; border: 1px solid #286b4d; border-radius: 8px;"
-QR_OK_STYLE = "font-size: 11px; font-weight: 800; color: #6ee7a4; background: #123c2b; padding: 4px 8px; border: 1px solid #286b4d; border-radius: 9px;"
-QR_BAD_STYLE = "font-size: 11px; font-weight: 800; color: #ff9daa; background: #4b1f2a; padding: 4px 8px; border: 1px solid #8b394b; border-radius: 9px;"
 # No current drone fix: stop just inside the coverage arc so the bearing is easy to read.
 NO_DRONE_LINE_M = SECTOR_RADIUS_M * 0.98
 DEFAULT_DRONE_DIST_M = 1000.0
@@ -58,6 +56,7 @@ class SettingsDialog(QDialog):
 
     def __init__(self, config: AppConfig, parent=None) -> None:
         super().__init__(parent)
+        self._ui_theme = config.ui_theme
         self.setWindowTitle(t("Tracker settings"))
         self.setModal(True)
         self.setMinimumWidth(560)
@@ -117,15 +116,20 @@ class SettingsDialog(QDialog):
         lay.addWidget(heading)
         lay.addWidget(intro)
         lay.addWidget(language_row(config.language, self.language_restart.emit))
+        lay.addWidget(theme_row(config.ui_theme, self._set_ui_theme))
         lay.addWidget(compass_card)
         lay.addWidget(qr_card)
         lay.addWidget(alerts_card)
         lay.addWidget(rerun)
         lay.addWidget(buttons)
 
+    def _set_ui_theme(self, theme: str) -> None:
+        self._ui_theme = theme
+
     def apply(self, config: AppConfig) -> None:
         config.declination_deg = self.declination.value()
         config.qr_roi = (self.roi_w.value(), self.roi_h.value())
+        config.ui_theme = self._ui_theme
         config.alert_power = self.alert_power.isChecked()
         config.alert_qr_read = self.alert_qr_read.isChecked()
         config.alert_spoofing = self.alert_spoofing.isChecked()
@@ -185,8 +189,7 @@ class MainWindow(QMainWindow):
         drone_bar.addWidget(self.circle_btn)
         self.sim_bar.setObjectName("simBar")
         self.sim_bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.sim_bar.setStyleSheet(
-            f"QWidget#simBar {{ background: #070d17; border-top: 1px solid {BORDER}; }}")
+        self.sim_bar.setStyleSheet(sim_bar_style())
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
@@ -203,11 +206,7 @@ class MainWindow(QMainWindow):
         for b, color in ((self.auto_btn, GREEN), (self.manual_btn, AMBER)):
             b.setMinimumHeight(42)
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            b.setStyleSheet(
-                f"QPushButton {{ font-size: 13px; font-weight: 800; border: 1px solid {BORDER}; "
-                f"background: #0e1726; color: {MUTED}; border-radius: 8px; }}"
-                f"QPushButton:checked {{ background: {color}; color: #06131b; border: 1px solid {color}; }}"
-                f"QPushButton:checked:hover {{ background: {color}; color: #06131b; border: 1px solid {color}; }}")
+            b.setStyleSheet(mode_button_style(color))
             self.mode_group.addButton(b)
         self.auto_btn.setChecked(True)
         mode_row = QHBoxLayout()
@@ -331,19 +330,8 @@ class MainWindow(QMainWindow):
         # Selectors stay on the rail itself. An unscoped rule here would beat the
         # app stylesheet and paint every child — including the cyan "Point to target"
         # button — with this dark fill, which hides its near-black label.
-        rail_edge = "border-right" if is_rtl() else "border-left"
-        right.setStyleSheet(f"""
-            QWidget#sideRail {{
-                background: {SURFACE};
-                {rail_edge}: 1px solid {BORDER};
-            }}
-            QWidget#sideRail QScrollArea,
-            QWidget#sideRail QScrollArea > QWidget,
-            QWidget#sideRail QScrollArea > QWidget > QWidget {{
-                background: {SURFACE};
-                border: none;
-            }}
-        """)
+        right.setStyleSheet(side_rail_style(rtl=is_rtl()))
+        self.side_rail = right
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.addWidget(scroll)
@@ -507,12 +495,13 @@ class MainWindow(QMainWindow):
         self._qr_rate = rate
         if hasattr(self, "qr_rate_value"):
             self.qr_rate_value.setText(ltr(f"{rate:.0f}/s"))
+        qr_ok, qr_bad = qr_indicator_styles()
         if rate > 0:
             self.qr_indicator.setText(t("QR LINK ACTIVE"))
-            self.qr_indicator.setStyleSheet(QR_OK_STYLE)
+            self.qr_indicator.setStyleSheet(qr_ok)
         else:
             self.qr_indicator.setText(t("NO QR CODE DETECTED"))
-            self.qr_indicator.setStyleSheet(QR_BAD_STYLE)
+            self.qr_indicator.setStyleSheet(qr_bad)
 
     def _on_telemetry(self, tel) -> None:
         self.serial_label.setText(tel.serial or "\u2014")
@@ -530,7 +519,8 @@ class MainWindow(QMainWindow):
     def _on_gps_lost(self) -> None:
         if self.source_kind != SOURCE_QR:
             return
-        self.gps_banner.setStyleSheet(NO_GPS_STYLE)
+        no_gps, _ = gps_banner_styles()
+        self.gps_banner.setStyleSheet(no_gps)
         self.gps_text.setText(t("DRONE HAS NO GPS \u2013 aim the antenna manually"))
         self.gps_banner.show()
         self.map.set_drone_last_known(True)
@@ -539,7 +529,8 @@ class MainWindow(QMainWindow):
     def _on_gps_restored(self) -> None:
         if self.source_kind != SOURCE_QR:
             return
-        self.gps_banner.setStyleSheet(GPS_BACK_STYLE)
+        _, gps_back = gps_banner_styles()
+        self.gps_banner.setStyleSheet(gps_back)
         self.gps_text.setText(t("Drone GPS is back"))
         self.gps_banner.show()
         self.map.set_drone_last_known(False)
@@ -710,6 +701,7 @@ class MainWindow(QMainWindow):
             return
         dlg.apply(self.config)
         save_config(self.config)
+        self.reapply_theme()
         self._apply_alert_settings()
         self.apply_site()
         if result == SettingsDialog.RERUN_SETUP:
@@ -718,6 +710,25 @@ class MainWindow(QMainWindow):
     def _on_language_restart(self, language: str) -> None:
         self._language_restarting = True
         self.language_restart.emit(language)
+
+    def reapply_theme(self) -> None:
+        set_ui_theme(self.config.ui_theme)
+        apply_app_stylesheet()
+        self.sim_bar.setStyleSheet(sim_bar_style())
+        self.side_rail.setStyleSheet(side_rail_style(rtl=is_rtl()))
+        for b, color in ((self.auto_btn, GREEN), (self.manual_btn, AMBER)):
+            b.setStyleSheet(mode_button_style(color))
+        self._set_qr_indicator(self._qr_rate)
+        if not self.gps_banner.isHidden():
+            if "NO GPS" in self.gps_text.text():
+                no_gps, _ = gps_banner_styles()
+                self.gps_banner.setStyleSheet(no_gps)
+            else:
+                _, gps_back = gps_banner_styles()
+                self.gps_banner.setStyleSheet(gps_back)
+        self.overlay.apply_theme()
+        status = (self.controller.status or TrackStatus.NO_POSITION).value
+        self._on_status(status)
 
     def shutdown(self) -> None:
         self._qr_watch.stop()

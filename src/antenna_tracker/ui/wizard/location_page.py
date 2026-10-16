@@ -17,7 +17,7 @@ from antenna_tracker.geo.coords import (
 )
 from antenna_tracker.i18n import ltr, t
 from antenna_tracker.ui.map_view import MapView
-from antenna_tracker.ui.theme import AMBER, GREEN, MUTED, RED, TEXT, card, muted
+from antenna_tracker.ui.theme import AMBER, BORDER, GREEN, MUTED, RED, TEXT, card, muted
 
 BIG = "font-size: 16px; padding: 7px;"
 
@@ -78,7 +78,7 @@ class LocationPage(QWizardPage):
         self.map = MapView(basemap=self._basemap, zoom_scaled_marker=True)
         self.map.basemap_changed.connect(self._on_basemap)
         self.map.setMinimumHeight(300)
-        self.map.setStyleSheet("border: 1px solid #1d2b42; border-radius: 10px;")
+        self.map.setStyleSheet(f"border: 1px solid {BORDER}; border-radius: 10px;")
 
         form = QFormLayout()
         form.setSpacing(11)
