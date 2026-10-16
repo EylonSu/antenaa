@@ -246,9 +246,22 @@ def test_wizard_combo_selection_is_readable(qapp, config, turret):
         highlight = _bluest_row_color(image)
         assert highlight != QColor(ACCENT)
         assert _luminance(highlight) < 0.2
+        assert _light_edge_pixels(image) == 0
     finally:
         w.close()
         qapp.setStyleSheet(previous)
+
+
+def _light_edge_pixels(image) -> int:
+    """White macOS menu margins show up as light pixels along the popup edges."""
+    width, height = image.width(), image.height()
+    light = 0
+    ys = list(range(0, min(10, height))) + list(range(max(0, height - 10), height))
+    for y in ys:
+        for x in range(0, width, 6):
+            if image.pixelColor(x, y).lightness() > 200:
+                light += 1
+    return light
 
 
 def _bluest_row_color(image):

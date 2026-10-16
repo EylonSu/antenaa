@@ -34,8 +34,12 @@ def test_helper_plist_declares_location_use() -> None:
 
     root = files("antenna_tracker.geo")
     plist = plistlib.loads(root.joinpath("macos_location_helper.plist").read_bytes())
+    assert plist["CFBundlePackageType"] == "APPL"
+    assert plist["CFBundleExecutable"] == "antenaa-location"
+    assert "LSUIElement" not in plist
     assert "location" in plist["NSLocationWhenInUseUsageDescription"].lower()
-    assert "CLLocationManager" in root.joinpath("macos_location_helper.swift").read_text(encoding="utf-8")
+    source = root.joinpath("macos_location_helper.swift").read_text(encoding="utf-8")
+    assert "CLLocationManager" in source and "NSApplication" in source
 
 
 def test_position_fix_reads_height_only_when_usable(qapp) -> None:

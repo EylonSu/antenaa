@@ -57,6 +57,7 @@ class ComputerLocation(QObject):
         self._got_fix = False
         self._busy = False
         self._stopped = False
+        self.failure = ""
         self._give_up = QTimer(self)
         self._give_up.setSingleShot(True)
         self._give_up.timeout.connect(self._on_timeout)
@@ -68,6 +69,7 @@ class ComputerLocation(QObject):
             return
         self._stopped = False
         self._busy = True
+        self.failure = ""
         if uses_macos_helper():
             self._start_helper()
             return
@@ -90,7 +92,7 @@ class ComputerLocation(QObject):
         if self._helper is None:
             self._helper = MacosLocationThread(self)
             self._helper.found.connect(self._deliver)
-            self._helper.unavailable.connect(self._fail)
+            self._helper.unavailable.connect(self._helper_failed)
         if not self._helper.isRunning():
             self._helper.start()
 
@@ -151,7 +153,13 @@ class ComputerLocation(QObject):
     def _on_timeout(self) -> None:
         if self._stopped or self._got_fix:
             return
+        self._busy = False
         self.unavailable.emit()
+
+    def _helper_failed(self) -> None:
+        helper = self._helper
+        self.failure = getattr(helper, "failure", "") if helper is not None else ""
+        self._fail()
 
     def _on_error(self, error: QGeoPositionInfoSource.Error) -> None:
         if error in (
@@ -160,6 +168,8 @@ class ComputerLocation(QObject):
         ):
             return
         if not self._got_fix:
+            if error == QGeoPositionInfoSource.Error.AccessError:
+                self.failure = "blocked"
             self._fail()
         self._give_up.stop()
         if self._source is not None:

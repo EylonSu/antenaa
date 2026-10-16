@@ -105,6 +105,8 @@ QComboBox {{
     color: {TEXT};
     selection-background-color: #1a3a52;
     selection-color: {TEXT};
+    /* macOS draws the list as a menu, leaving white bars above and below it. */
+    combobox-popup: 0;
 }}
 QSpinBox, QDoubleSpinBox {{
     {spin_padding}

@@ -49,6 +49,7 @@ def test_constructing_the_page_does_not_look_up_location(qapp) -> None:
     page, held = _page()
     assert page._lookup is None
     assert held == []
+    assert page.locate_btn.text() == "Use this computer's position"
     page.close()
 
 
@@ -75,6 +76,7 @@ def test_empty_grid_uses_computer_fix(qapp) -> None:
     assert page.takeoff_alt.value() == 754
     assert page.isComplete()
     assert page.message.text().startswith("Suggested from this computer")
+    assert "36N 711000 3513000" in page.message.text()
     page.cleanupPage()
     assert held[0].stopped == 1
     page.close()
@@ -129,6 +131,50 @@ def test_missing_fix_asks_for_the_grid(qapp) -> None:
     page.initializePage()
     assert "Could not read this computer's location" in page.message.text()
     assert not page.isComplete()
+    page.close()
+
+
+def test_button_replaces_the_grid_with_this_computer(qapp) -> None:
+    page, held = _page(
+        AppConfig(utm_easting="667000", utm_northing="550500", antenna_alt_amsl=15),
+        fix=(JERUSALEM.lat, JERUSALEM.lon, 754.2),
+    )
+    page.initializePage()
+    assert held == []
+    page.locate_btn.click()
+    assert held[0].requests == 1
+    assert page.easting.text() == "711000"
+    assert page.northing.text() == "513000"
+    assert page.alt.value() == 754
+    assert page.locate_btn.isEnabled()
+    assert page.message.text().startswith("Suggested from this computer")
+    page.close()
+
+
+def test_button_after_typing_uses_the_new_fix(qapp) -> None:
+    page, held = _page()
+    page.show()
+    page.initializePage()
+    page.easting.setFocus()
+    QTest.keyClicks(page.easting, "667000")
+    qapp.processEvents()
+    page.locate_btn.click()
+    held[0].found.emit(JERUSALEM.lat, JERUSALEM.lon, 80)
+    assert page.easting.text() == "711000"
+    assert page.northing.text() == "513000"
+    assert page.alt.value() == 80
+    assert page.locate_btn.isEnabled()
+    page.close()
+
+
+def test_button_keeps_the_grid_when_the_read_fails(qapp) -> None:
+    page, _held = _page(AppConfig(utm_easting="667000", utm_northing="550500"), fail=True)
+    page.locate_btn.click()
+    assert page.easting.text() == "667000"
+    assert page.northing.text() == "550500"
+    assert page.isComplete()
+    assert "Could not read this computer's location" in page.message.text()
+    assert page.locate_btn.isEnabled()
     page.close()
 
 

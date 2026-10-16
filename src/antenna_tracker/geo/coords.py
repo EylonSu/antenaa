@@ -68,6 +68,11 @@ def in_israel(p: LatLon) -> bool:
     return lat_min <= p.lat <= lat_max and lon_min <= p.lon <= lon_max
 
 
+def format_utm_fields(easting: str, northing: str) -> str:
+    """UTM 36N as shown in the UI: zone, full easting, full northing."""
+    return f"36N {easting} 3{northing}"
+
+
 def utm_fields_for_latlon(lat: float, lon: float) -> tuple[str, str]:
     """Six-digit easting and northing for a point the site form can accept."""
     if not in_israel(LatLon(lat, lon)):
@@ -89,8 +94,8 @@ def utm_input_to_latlon(easting: str, northing: str) -> LatLon:
     if not in_israel(p):
         raise UtmError(
             t(
-                "That position ({lat}, {lon}) is outside Israel. "
+                "That position ({utm}) is outside Israel. "
                 "Check that the easting and northing are not swapped or mistyped."
-            ).format(lat=ltr(f"{p.lat:.4f}"), lon=ltr(f"{p.lon:.4f}"))
+            ).format(utm=ltr(format_utm_fields(easting, northing)))
         )
     return p

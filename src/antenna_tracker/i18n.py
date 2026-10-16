@@ -130,9 +130,15 @@ _HE: dict[str, str] = {
     "Enter the 12-digit UTM grid reference and verify the position on the map. An empty grid starts from this computer's location.": (
         "הזינו רשת UTM בת \u206612\u2069 ספרות ואמתו את המיקום במפה. רשת ריקה מתחילה ממיקום המחשב."
     ),
-    "Looking up this computer's location...": "מאתר את מיקום המחשב...",
-    "Suggested from this computer: {lat}, {lon}. Check the map.": (
-        "הצעה לפי מיקום המחשב: {lat}, {lon}. בדקו במפה."
+    "Use this computer's position": "השתמשו במיקום המחשב",
+    "Waiting for this computer's location. Allow it if the system asks.": (
+        "ממתין למיקום המחשב. אשרו אם המערכת מבקשת."
+    ),
+    "Location is blocked. Allow antenaa in system settings, then try again.": (
+        "המיקום חסום. אשרו את antenaa בהגדרות המערכת, ואז נסו שוב."
+    ),
+    "Suggested from this computer: {utm}. Check the map.": (
+        "הצעה לפי מיקום המחשב: {utm}. בדקו במפה."
     ),
     "This computer is outside the operating area. Enter the site grid.": (
         "המחשב מחוץ לאזור הפעולה. הזינו את רשת האתר."
@@ -148,7 +154,7 @@ _HE: dict[str, str] = {
     "Takeoff altitude \u00b7 above sea level": "גובה ההמנח \u00b7 מעל פני הים",
     "SITE COORDINATES": "קואורדינטות אתר",
     "Use the local six-digit easting and northing values.": "השתמשו בערכי מזרח וצפון בני שש ספרות.",
-    "\u2714 Found it: {lat}, {lon}  (check the map)": "\u2714 נמצא: {lat}, {lon}  (בדקו במפה)",
+    "\u2714 Found it: {utm}  (check the map)": "\u2714 נמצא: {utm}  (בדקו במפה)",
     "Please enter the {name} (6 digits).": "נא להזין {name} (\u20666\u2069 ספרות).",
     "easting": "מזרח",
     "northing": "צפון",
@@ -160,9 +166,9 @@ _HE: dict[str, str] = {
         "הזינו \u206612\u2069 ספרות: \u20666\u2069 למזרח ואז \u20666\u2069 לצפון."
     ),
     (
-        "That position ({lat}, {lon}) is outside Israel. "
+        "That position ({utm}) is outside Israel. "
         "Check that the easting and northing are not swapped or mistyped."
-    ): "המיקום ({lat}, {lon}) מחוץ לישראל. בדקו שהמזרח והצפון לא הוחלפו או הוקלדו שגוי.",
+    ): "המיקום ({utm}) מחוץ לישראל. בדקו שהמזרח והצפון לא הוחלפו או הוקלדו שגוי.",
     "  (Recommended)": "  (מומלץ)",
     "Simulated tracker": "עוקב מדומה",
     "Could not open {device}: {err}": "לא ניתן לפתוח את {device}: {err}",

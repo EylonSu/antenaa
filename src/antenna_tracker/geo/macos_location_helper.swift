@@ -1,16 +1,37 @@
+import AppKit
 import CoreLocation
-import Darwin
 import Foundation
 
-/// Prints "latitude longitude altitude" once, then exits.
-/// Altitude is "nan" when Core Location has no vertical fix.
-/// The binary embeds an Info.plist so macOS can show the location prompt.
+/// Prints one status line, and writes the same line to the path in argv when given.
+/// "lat lon alt" on success. "denied", "timeout", or "error" otherwise.
+/// Must live in an .app bundle so macOS will show the location prompt.
+let outputURL: URL? = CommandLine.arguments.count > 1
+    ? URL(fileURLWithPath: CommandLine.arguments[1])
+    : nil
+
+func report(_ line: String, _ code: Int32) -> Never {
+    if let outputURL {
+        try? (line + "\n").write(to: outputURL, atomically: true, encoding: .utf8)
+    }
+    fputs(line + "\n", stderr)
+    fflush(stderr)
+    exit(code)
+}
+
 final class Locator: NSObject, CLLocationManagerDelegate {
     let manager = CLLocationManager()
     var asked = false
     var started = false
 
     func start() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        if #available(macOS 14.0, *) {
+            app.activate()
+        } else {
+            app.activate(ignoringOtherApps: true)
+        }
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.delegate = self
         handle(manager.authorizationStatus)
@@ -28,8 +49,7 @@ final class Locator: NSObject, CLLocationManagerDelegate {
             }
             return
         }
-        fputs("denied\n", stderr)
-        exit(2)
+        report("denied", 2)
     }
 
     func begin() {
@@ -50,22 +70,18 @@ final class Locator: NSObject, CLLocationManagerDelegate {
             ? String(format: "%.1f", loc.altitude)
             : "nan"
         let line = String(format: "%.6f %.6f", loc.coordinate.latitude, loc.coordinate.longitude) + " " + alt
-        print(line)
-        fflush(stdout)
-        exit(0)
+        report(line, 0)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         if (error as NSError).code == CLError.locationUnknown.rawValue {
             return
         }
-        fputs("\(error.localizedDescription)\n", stderr)
-        exit(1)
+        report("error", 1)
     }
 }
 
 let locator = Locator()
 locator.start()
 RunLoop.main.run(until: Date().addingTimeInterval(180))
-fputs("timeout\n", stderr)
-exit(3)
+report("timeout", 3)

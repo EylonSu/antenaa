@@ -7,12 +7,14 @@ from PySide6.QtCore import QObject, QRegularExpression, Qt, QTimer
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QCheckBox, QDoubleSpinBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QSizePolicy, QVBoxLayout, QWidget, QWizardPage,
+    QPushButton, QSizePolicy, QVBoxLayout, QWidget, QWizardPage,
 )
 
 from antenna_tracker.config import AppConfig
 from antenna_tracker.geo.computer_location import ComputerLocation
-from antenna_tracker.geo.coords import LatLon, UtmError, utm_fields_for_latlon, utm_input_to_latlon
+from antenna_tracker.geo.coords import (
+    LatLon, UtmError, format_utm_fields, utm_fields_for_latlon, utm_input_to_latlon,
+)
 from antenna_tracker.i18n import ltr, t
 from antenna_tracker.ui.map_view import MapView
 from antenna_tracker.ui.theme import AMBER, GREEN, MUTED, RED, TEXT, card, muted
@@ -27,6 +29,7 @@ class LocationPage(QWizardPage):
         self.config = config
         self._location_source = ComputerLocation if location_source is None else location_source
         self._lookup = None
+        self._accept_computer_fix = False
         self._from_computer = False
         self._coords_touched = False
         self._alt_touched = False
@@ -83,8 +86,12 @@ class LocationPage(QWizardPage):
         form.addRow(QLabel(t("Site altitude · above sea level")), self.alt)
         form.addRow(self.takeoff_near)
         form.addRow(QLabel(t("Takeoff altitude · above sea level")), self.takeoff_alt)
+        self.locate_btn = QPushButton(t("Use this computer's position"), styleSheet=BIG)
+        self.locate_btn.setProperty("primary", True)
+        self.locate_btn.clicked.connect(self._on_locate_clicked)
         location_card, location = card(t("SITE COORDINATES"))
         location.addWidget(muted(t("Use the local six-digit easting and northing values.")))
+        location.addWidget(self.locate_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         location.addLayout(form)
         location.addWidget(self.message)
         lay = QVBoxLayout(self)
@@ -152,23 +159,40 @@ class LocationPage(QWizardPage):
         if self._lookup is not None:
             self._lookup.stop()
 
+    def _on_locate_clicked(self) -> None:
+        """The button asks for a fresh fix and uses it in place of the current grid."""
+        self._coords_touched = False
+        self._alt_touched = False
+        self._accept_computer_fix = True
+        self.locate_btn.setEnabled(False)
+        self._set_status(t("Waiting for this computer's location. Allow it if the system asks."), MUTED)
+        self._ensure_lookup()
+        self._lookup.request()
+
+    def _ensure_lookup(self) -> None:
+        if self._lookup is not None:
+            return
+        self._lookup = self._location_source(self)
+        self._lookup.found.connect(self._apply_computer_fix)
+        self._lookup.unavailable.connect(self._computer_fix_unavailable)
+
     def _suggest_from_computer(self) -> None:
         if self._coords_touched or self.easting.text().strip() or self.northing.text().strip():
             return
-        if self._lookup is None:
-            self._lookup = self._location_source(self)
-            self._lookup.found.connect(self._apply_computer_fix)
-            self._lookup.unavailable.connect(self._computer_fix_unavailable)
-        self._set_status(t("Looking up this computer's location..."), MUTED)
+        self._ensure_lookup()
+        self._set_status(t("Waiting for this computer's location. Allow it if the system asks."), MUTED)
         self._lookup.request()
 
     def _apply_computer_fix(self, lat: float, lon: float, alt: float) -> None:
-        if self._coords_touched:
+        accept = self._accept_computer_fix
+        self._accept_computer_fix = False
+        self.locate_btn.setEnabled(True)
+        if self._coords_touched and not accept:
             return
         try:
             easting, northing = utm_fields_for_latlon(lat, lon)
         except UtmError:
-            if not self.easting.text().strip() and not self.northing.text().strip():
+            if accept or not (self.easting.text().strip() or self.northing.text().strip()):
                 self._set_status(
                     t("This computer is outside the operating area. Enter the site grid."),
                     RED,
@@ -182,20 +206,28 @@ class LocationPage(QWizardPage):
             self.easting.setText(easting)
             self._easting_prev = self.easting.text()
             self.northing.setText(northing)
-            if not self._alt_touched and math.isfinite(alt):
+            if (accept or not self._alt_touched) and math.isfinite(alt):
                 self.alt.setValue(round(alt))
         finally:
             self._applying = False
 
     def _computer_fix_unavailable(self) -> None:
-        if (
+        accept = self._accept_computer_fix
+        self._accept_computer_fix = False
+        self.locate_btn.setEnabled(True)
+        if not accept and (
             self._coords_touched
             or self._from_computer
             or self.easting.text().strip()
             or self.northing.text().strip()
         ):
             return
-        self._set_status(t("Could not read this computer's location. Enter the site grid."), RED)
+        reason = getattr(self._lookup, "failure", "")
+        if reason in ("denied", "blocked"):
+            text = t("Location is blocked. Allow antenaa in system settings, then try again.")
+        else:
+            text = t("Could not read this computer's location. Enter the site grid.")
+        self._set_status(text, RED)
 
     def _set_status(self, text: str, color: str, *, bold: bool = False) -> None:
         weight = " font-weight: bold;" if bold else ""
@@ -236,15 +268,12 @@ class LocationPage(QWizardPage):
             self._pos = None
             self._set_status(str(e), RED)
         else:
-            lat = ltr(f"{self._pos.lat:.5f}")
-            lon = ltr(f"{self._pos.lon:.5f}")
+            utm = ltr(format_utm_fields(self.easting.text(), self.northing.text()))
             if self._from_computer:
-                text = t("Suggested from this computer: {lat}, {lon}. Check the map.").format(
-                    lat=lat, lon=lon,
-                )
+                text = t("Suggested from this computer: {utm}. Check the map.").format(utm=utm)
                 color = AMBER
             else:
-                text = t("\u2714 Found it: {lat}, {lon}  (check the map)").format(lat=lat, lon=lon)
+                text = t("\u2714 Found it: {utm}  (check the map)").format(utm=utm)
                 color = GREEN
             self._set_status(text, color, bold=True)
             self.map.set_antenna(self._pos.lat, self._pos.lon, 15)

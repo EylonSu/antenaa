@@ -36,8 +36,12 @@ def test_jerusalem_roundtrip() -> None:
 
 
 def test_outside_israel_rejected() -> None:
-    with pytest.raises(UtmError, match="outside Israel"):
+    with pytest.raises(UtmError, match=r"36N 200000 3513000"):
         coords.utm_input_to_latlon("200000", "513000")
+
+
+def test_utm_display_includes_zone_and_full_northing() -> None:
+    assert coords.format_utm_fields("711000", "513000") == "36N 711000 3513000"
 
 
 def test_utm_fields_roundtrip_known_sites() -> None:
