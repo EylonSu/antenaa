@@ -54,6 +54,10 @@ class AppConfig:
     qr_roi: tuple[float, float] = (0.25, 0.35)  # fraction of width, height from top-left
     map_basemap: str = "osm"
     language: str = "he"
+    alert_power: bool = True
+    alert_qr_read: bool = True
+    alert_spoofing: bool = True
+    alert_sound: bool = True
 
     @property
     def effective_takeoff_alt_amsl(self) -> float:

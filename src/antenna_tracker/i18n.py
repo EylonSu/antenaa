@@ -22,6 +22,11 @@ _HE: dict[str, str] = {
         "חל רק כשהכיוון נמדד במצפן."
     ),
     "QR CAPTURE REGION": "אזור קליטת QR",
+    "ALERTS": "התראות",
+    "Alert when the tracker has no power": "התראה כשאין מתח לעוקב",
+    "Alert when the QR read fails": "התראה כשקריאת ה-QR נכשלת",
+    "Alert when spoofing is detected": "התראה כשמזוהה זיוף מיקום",
+    "Play the alarm sound": "השמעת צליל אזעקה",
     "Frame width": "רוחב פריים",
     "Frame height": "גובה פריים",
     "Fraction of the video frame scanned from the top-left corner (0.05\u20131.00).": (
@@ -69,7 +74,21 @@ _HE: dict[str, str] = {
     "NO POWER": "אין מתח",
     "NO DRONE GPS": "אין GPS לרחפן",
     "Silence alarm": "השתק אזעקה",
+    "Hide for 15 min": "הסתרה ל-\u206615\u2069 דקות",
+    "Silence for 15 min": "השתקה ל-\u206615\u2069 דקות",
     "Reconnects automatically": "מתחבר מחדש לבד",
+    "SPOOFING": "זיוף מיקום",
+    "Drone position jumped": "מיקום הרחפן קפץ",
+    "The position moved 5 km or more in one second.\nAim the antenna manually until you return to AUTO.": (
+        "המיקום זז \u20665\u2069 ק״מ או יותר בשנייה אחת.\nכוונו את האנטנה ידנית עד שתחזרו לאוטומטי."
+    ),
+    "Stays until you return to AUTO.": "נשאר עד שתחזרו לאוטומטי.",
+    "QR READ FAILED": "קריאת QR נכשלה",
+    "QR code not reading": "קוד QR לא נקרא",
+    "No usable code is coming from the video.\nCheck the camera and the QR code.": (
+        "לא מגיע קוד שמיש מהווידאו.\nבדקו את המצלמה ואת קוד ה-QR."
+    ),
+    "Clears when a code is read.": "נעלם כשנקרא קוד.",
     "POWER LOST": "אובדן מתח",
     "Tracker has no power": "אין מתח לעוקב",
     "Check the battery and power cable.\nThe app will reconnect by itself.": (

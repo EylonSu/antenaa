@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QPushButton,
     QScrollArea, QSlider, QSplitter, QVBoxLayout, QWidget,
 )
@@ -18,7 +20,7 @@ from antenna_tracker.hardware.turret_client import TurretClient
 from antenna_tracker.sources.qr_video import QrVideoSource
 from antenna_tracker.sources.simulated import SimulatedSource
 from antenna_tracker.tracking.controller import AntennaSite, Mode, TrackingController, TrackStatus
-from antenna_tracker.ui.alerts import PowerOverlay
+from antenna_tracker.ui.alerts import ALERT_POWER, ALERT_QR, ALERT_SPOOF, PowerOverlay
 from antenna_tracker.ui.gauges import CompassGauge, ElevationGauge
 from antenna_tracker.ui.manual_panel import ManualPanel
 from antenna_tracker.ui.map_view import SECTOR_RADIUS_M, MapView
@@ -41,13 +43,13 @@ PILL = {
 SOURCE_QR, SOURCE_SIM = "qr", "sim"
 NO_GPS_STYLE = "background: #4a3410; color: #ffd57b; border: 1px solid #8d6724; border-radius: 8px;"
 GPS_BACK_STYLE = "background: #123c2b; color: #7ce8ad; border: 1px solid #286b4d; border-radius: 8px;"
-JAM_STYLE = "background: #4b1f2a; color: #ff9daa; border: 1px solid #8b394b; border-radius: 8px;"
 QR_OK_STYLE = "font-size: 11px; font-weight: 800; color: #6ee7a4; background: #123c2b; padding: 4px 8px; border: 1px solid #286b4d; border-radius: 9px;"
 QR_BAD_STYLE = "font-size: 11px; font-weight: 800; color: #ff9daa; background: #4b1f2a; padding: 4px 8px; border: 1px solid #8b394b; border-radius: 9px;"
 # No current drone fix: stop just inside the coverage arc so the bearing is easy to read.
 NO_DRONE_LINE_M = SECTOR_RADIUS_M * 0.98
 DEFAULT_DRONE_DIST_M = 1000.0
 DEFAULT_DRONE_HEIGHT_M = 100.0
+QR_ALERT_AFTER_S = 2.0
 
 
 class SettingsDialog(QDialog):
@@ -83,6 +85,21 @@ class SettingsDialog(QDialog):
         qr.addLayout(qr_form)
         qr.addWidget(muted(t("Fraction of the video frame scanned from the top-left corner (0.05–1.00)."), True))
 
+        self.alert_power = QCheckBox(t("Alert when the tracker has no power"))
+        self.alert_qr_read = QCheckBox(t("Alert when the QR read fails"))
+        self.alert_spoofing = QCheckBox(t("Alert when spoofing is detected"))
+        self.alert_sound = QCheckBox(t("Play the alarm sound"))
+        for box, checked in (
+            (self.alert_power, config.alert_power),
+            (self.alert_qr_read, config.alert_qr_read),
+            (self.alert_spoofing, config.alert_spoofing),
+            (self.alert_sound, config.alert_sound),
+        ):
+            box.setChecked(checked)
+        alerts_card, alerts = card(t("ALERTS"))
+        for box in (self.alert_power, self.alert_qr_read, self.alert_spoofing, self.alert_sound):
+            alerts.addWidget(box)
+
         rerun = QPushButton(t("Run setup again"))
         rerun.setProperty("danger", True)
         rerun.clicked.connect(lambda: self.done(self.RERUN_SETUP))
@@ -102,12 +119,17 @@ class SettingsDialog(QDialog):
         lay.addWidget(language_row(config.language, self.language_restart.emit))
         lay.addWidget(compass_card)
         lay.addWidget(qr_card)
+        lay.addWidget(alerts_card)
         lay.addWidget(rerun)
         lay.addWidget(buttons)
 
     def apply(self, config: AppConfig) -> None:
         config.declination_deg = self.declination.value()
         config.qr_roi = (self.roi_w.value(), self.roi_h.value())
+        config.alert_power = self.alert_power.isChecked()
+        config.alert_qr_read = self.alert_qr_read.isChecked()
+        config.alert_spoofing = self.alert_spoofing.isChecked()
+        config.alert_sound = self.alert_sound.isChecked()
 
 
 class MainWindow(QMainWindow):
@@ -129,8 +151,15 @@ class MainWindow(QMainWindow):
             interval_s=config.update_interval_s, stale_timeout_s=config.stale_timeout_s)
         self._solution: Solution | None = None
         self._qr_rate = 0.0
+        self._power_lost = False
+        self._power_reason = ""
+        self._spoofing = False
+        self._qr_ok_at = time.monotonic()
         self._build()
         self._wire()
+        self._qr_watch = QTimer(self, interval=200)
+        self._qr_watch.timeout.connect(self._sync_qr_alert)
+        self._qr_watch.start()
         self._sim_heartbeat = QTimer(self, interval=1000)
         self._sim_heartbeat.timeout.connect(self._refresh_sim_drone)
         self._sim_heartbeat.start()
@@ -348,6 +377,7 @@ class MainWindow(QMainWindow):
         cv.addWidget(split, 1)
         self.setCentralWidget(central)
         self.overlay = PowerOverlay(split)
+        self.overlay.set_sound_enabled(self.config.alert_sound)
         self.resize(*default_window_size(self))
 
         for key, name in ((Qt.Key.Key_Up, "up"), (Qt.Key.Key_Down, "down"),
@@ -376,6 +406,8 @@ class MainWindow(QMainWindow):
         self.qr_source.gps_restored.connect(self._on_gps_restored)
         self.qr_source.possible_jamming.connect(lambda: self._on_possible_jamming(SOURCE_QR))
         self.sim_source.possible_jamming.connect(lambda: self._on_possible_jamming(SOURCE_SIM))
+        self.qr_source.telemetry.connect(self._mark_qr_usable)
+        self.qr_source.rejected.connect(self._mark_qr_usable)
         self.video.frame_ready.connect(self.decoder.submit_frame)
         self.decoder.decoded.connect(self.qr_source.feed)
         self.decoder.stats.connect(self._set_qr_indicator)
@@ -442,6 +474,8 @@ class MainWindow(QMainWindow):
             self.sim_source.stop_circle()
             self.circle_btn.setChecked(False)
             self.controller.set_drone_gps(self.qr_source.gps_ok)
+            self._qr_ok_at = time.monotonic()
+        self._sync_qr_alert()
         pos = self.source.latest()
         if pos is not None:
             self.map.set_drone(pos.lat, pos.lon, sim)
@@ -516,14 +550,40 @@ class MainWindow(QMainWindow):
             return
         if kind == SOURCE_SIM and not self.dev_mode:
             return
-        self.gps_banner.setStyleSheet(JAM_STYLE)
-        self.gps_text.setText(t("POSSIBLE JAMMING \u2013 aim the antenna manually"))
-        self.gps_banner.show()
         self.controller.set_mode(Mode.MANUAL)
+        self._spoofing = True
+        self._sync_spoof_alert()
         if kind == SOURCE_SIM:
             pos = self.sim_source.latest()
             if pos is not None:
                 self.map.set_drone(pos.lat, pos.lon, True)
+
+    def _mark_qr_usable(self, *_args) -> None:
+        self._qr_ok_at = time.monotonic()
+        self._sync_qr_alert()
+
+    def _sync_qr_alert(self) -> None:
+        failed = (
+            self.source_kind == SOURCE_QR
+            and time.monotonic() - self._qr_ok_at >= QR_ALERT_AFTER_S
+        )
+        self.overlay.set_active(ALERT_QR, failed and self.config.alert_qr_read)
+
+    def _sync_spoof_alert(self) -> None:
+        self.overlay.set_active(ALERT_SPOOF, self._spoofing and self.config.alert_spoofing)
+
+    def _sync_power_alert(self, *, restored: bool = False) -> None:
+        if self._power_lost and self.config.alert_power:
+            self.overlay.set_active(ALERT_POWER, True, self._power_reason)
+            return
+        show_back = restored and self.config.alert_power and not self._power_lost
+        self.overlay.set_active(ALERT_POWER, False, restored=show_back)
+
+    def _apply_alert_settings(self) -> None:
+        self.overlay.set_sound_enabled(self.config.alert_sound)
+        self._sync_power_alert()
+        self._sync_spoof_alert()
+        self._sync_qr_alert()
 
     def _on_alt(self, value: int) -> None:
         site = self.controller.site
@@ -612,16 +672,24 @@ class MainWindow(QMainWindow):
     def _on_mode(self, value: str) -> None:
         manual = value == Mode.MANUAL.value
         (self.manual_btn if manual else self.auto_btn).setChecked(True)
-        if not manual and self.controller.drone_gps_ok:
-            self.gps_banner.hide()
+        if not manual:
+            if self._spoofing:
+                self._spoofing = False
+                self._sync_spoof_alert()
+            if self.controller.drone_gps_ok:
+                self.gps_banner.hide()
         self.manual.refresh()
 
     def _on_power_lost(self, reason: str) -> None:
-        self.overlay.show_lost(reason)
+        self._power_lost = True
+        self._power_reason = reason
+        self._sync_power_alert()
         self.controller.tick()
 
     def _on_power_restored(self) -> None:
-        self.overlay.show_restored()
+        self._power_lost = False
+        self._power_reason = ""
+        self._sync_power_alert(restored=True)
         self.controller.reset_last_command()
         self.controller.tick()
 
@@ -642,6 +710,7 @@ class MainWindow(QMainWindow):
             return
         dlg.apply(self.config)
         save_config(self.config)
+        self._apply_alert_settings()
         self.apply_site()
         if result == SettingsDialog.RERUN_SETUP:
             self.rerun_setup.emit()
@@ -651,6 +720,8 @@ class MainWindow(QMainWindow):
         self.language_restart.emit(language)
 
     def shutdown(self) -> None:
+        self._qr_watch.stop()
+        self.overlay.shutdown()
         self.controller.stop()
         self.sim_source.stop()
         self.qr_source.stop()

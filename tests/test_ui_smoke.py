@@ -5,14 +5,17 @@ import pytest
 
 pytest.importorskip("PySide6.QtWebEngineWidgets")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QCheckBox  # noqa: E402
 
-from antenna_tracker.config import AppConfig  # noqa: E402
+from antenna_tracker.config import AppConfig, load_config, save_config  # noqa: E402
 from antenna_tracker.hardware import fake_turret  # noqa: E402
 from antenna_tracker.hardware.port_finder import PortIdentity  # noqa: E402
 from antenna_tracker.hardware.turret_client import TurretClient  # noqa: E402
 from antenna_tracker.tracking.controller import Mode, TrackStatus  # noqa: E402
-from antenna_tracker.ui.main_window import PILL, SOURCE_QR, SOURCE_SIM, MainWindow, SettingsDialog  # noqa: E402
+from antenna_tracker.ui.alerts import ALERT_POWER, ALERT_QR, ALERT_SPOOF  # noqa: E402
+from antenna_tracker.ui.main_window import (  # noqa: E402
+    QR_ALERT_AFTER_S, PILL, SOURCE_QR, SOURCE_SIM, MainWindow, SettingsDialog,
+)
 from antenna_tracker.ui.map_view import MAP_HTML  # noqa: E402
 from antenna_tracker.ui.wizard import SetupWizard  # noqa: E402
 
@@ -354,9 +357,12 @@ def test_main_window_tracks_and_handles_power_loss(qapp, config, turret, wait_un
 
     win.power_off_btn.click()
     assert wait_until(lambda: win.overlay.isVisible() and win.overlay.beeping)
+    assert win.overlay.alert_kind == ALERT_POWER
+    assert win.overlay.eyebrow.text() == "POWER LOST"
     assert not any(b.isEnabled() for b in win.manual.buttons.values())
     win.power_on_btn.click()
-    assert wait_until(lambda: turret.is_connected and not win.overlay.beeping)
+    assert wait_until(lambda: turret.is_connected and win.overlay.showing_restored and not win.overlay.beeping)
+    assert win.overlay.eyebrow.text() == "POWER RESTORED"
     win.shutdown()
     win.close()
 
@@ -377,14 +383,32 @@ def test_manual_panel_greys_out_unreachable(qapp, config, turret, wait_until):
     win.close()
 
 
-def test_settings_dialog_applies(qapp, config):
+def test_settings_dialog_applies(qapp, config, tmp_path):
+    fresh = AppConfig()
+    assert fresh.alert_power and fresh.alert_qr_read and fresh.alert_spoofing and fresh.alert_sound
     dlg = SettingsDialog(config)
     dlg.declination.setValue(7.5)
     dlg.roi_w.setValue(0.4)
     dlg.roi_h.setValue(0.6)
+    dlg.alert_power.setChecked(False)
+    dlg.alert_qr_read.setChecked(False)
+    dlg.alert_spoofing.setChecked(False)
+    dlg.alert_sound.setChecked(False)
     dlg.apply(config)
     assert config.declination_deg == 7.5
     assert config.qr_roi == (0.4, 0.6)
+    assert not config.alert_power
+    assert not config.alert_qr_read
+    assert not config.alert_spoofing
+    assert not config.alert_sound
+    path = tmp_path / "config.json"
+    save_config(config, path)
+    loaded = load_config(path)
+    assert loaded.alert_power is False
+    assert loaded.alert_qr_read is False
+    assert loaded.alert_spoofing is False
+    assert loaded.alert_sound is False
+    assert load_config(tmp_path / "missing.json").alert_power is True
 
 
 GOOD = "DRN-7|32.0900000|34.7900000|0|0|90.0|120.0|0|0|0|0|0|850|-1"
@@ -427,6 +451,7 @@ def test_gps_lost_and_restored_flow(qapp, config, turret, wait_until, monkeypatc
     assert win.controller.mode is Mode.MANUAL
     assert win.pill.text() == "NO DRONE GPS"
     assert not win.gps_banner.isHidden() and "NO GPS" in win.gps_text.text()
+    assert win.overlay.alert_kind is None
 
     for _ in range(3):
         win.qr_source.feed(GOOD, t)
@@ -457,13 +482,18 @@ def test_possible_jamming_banner_switches_to_manual(qapp, config, turret, wait_u
     win.qr_source.feed(JAMMED, t + 0.2)
     assert win.controller.mode is Mode.MANUAL
     assert win.pill.text() == "MANUAL"
-    assert not win.gps_banner.isHidden()
-    assert win.gps_text.text() == "POSSIBLE JAMMING \u2013 aim the antenna manually"
+    assert win.gps_banner.isHidden()
+    assert win.overlay.alert_kind == ALERT_SPOOF
+    assert win.overlay.isVisible() and win.overlay.beeping
+    assert win.overlay.eyebrow.text() == "SPOOFING"
+    assert "5 km" in win.overlay.detail.text()
     assert win.qr_source.latest().lat == pytest.approx(32.09)
 
     win.auto_btn.click()
     assert win.controller.mode is Mode.AUTO
     assert win.gps_banner.isHidden()
+    assert win.overlay.alert_kind is None
+    assert not win.overlay.isVisible()
     win.shutdown()
     win.close()
 
@@ -478,13 +508,136 @@ def test_sim_jump_shows_jamming_banner(qapp, config, turret, wait_until):
     win.sim_source.set_position(pos.lat + math.degrees(6000 / 6_371_000), pos.lon)
     assert win.controller.mode is Mode.MANUAL
     assert win.pill.text() == "MANUAL"
-    assert not win.gps_banner.isHidden()
-    assert win.gps_text.text() == "POSSIBLE JAMMING \u2013 aim the antenna manually"
+    assert win.gps_banner.isHidden()
+    assert win.overlay.alert_kind == ALERT_SPOOF
+    assert win.overlay.isVisible() and win.overlay.beeping
     assert win.sim_source.latest().lat == pytest.approx(pos.lat)
 
     win.auto_btn.click()
     assert win.controller.mode is Mode.AUTO
     assert win.gps_banner.isHidden()
+    assert not win.overlay.isVisible()
+    win.shutdown()
+    win.close()
+
+
+OUTSIDE = "DRN-7|40.0000000|34.7900000|0|0|90.0|120.0|0|0|0|0|0|850|-1"
+TOO_FAST = "DRN-7|32.0920000|34.7900000|0|0|90.0|120.0|0|0|0|0|0|850|-1"
+
+
+def test_qr_read_failure_alert(qapp, config, turret, wait_until, monkeypatch):
+    monkeypatch.setattr("antenna_tracker.ui.main_window.QR_ALERT_AFTER_S", 0.05)
+    turret.open(PortIdentity(fake_turret.FAKE_PORT))
+    win = MainWindow(config, turret, dev_mode=True)
+    win.show()
+    assert wait_until(lambda: win.overlay.alert_kind == ALERT_QR and win.overlay.isVisible() and win.overlay.beeping)
+    assert win.qr_indicator.text() == "NO QR CODE DETECTED"
+    assert win.overlay.eyebrow.text() == "QR READ FAILED"
+
+    t = time.time()
+    win.qr_source.feed(GOOD, t)
+    assert win.overlay.alert_kind is None and not win.overlay.isVisible()
+
+    win.qr_source.feed("not-a-payload", t + 0.2)
+    assert wait_until(lambda: win.overlay.alert_kind == ALERT_QR)
+
+    win.qr_source.feed(OUTSIDE, t + 0.4)
+    assert win.overlay.alert_kind is None
+    win.qr_source.feed(GOOD, t + 1.0)
+    win.qr_source.feed(TOO_FAST, t + 1.0)
+    assert win.qr_source.rejected_by_reason.get("too fast") == 1
+    assert win.overlay.alert_kind is None
+    qapp.processEvents()
+    assert win.overlay.alert_kind != ALERT_QR
+
+    win.set_source_kind(SOURCE_SIM)
+    win._qr_ok_at = time.monotonic() - 10
+    win._sync_qr_alert()
+    assert win.overlay.alert_kind is None
+    win.shutdown()
+    win.close()
+
+
+def test_alert_hide_and_silence_snooze(qapp, config, turret, wait_until):
+    turret.open(PortIdentity(fake_turret.FAKE_PORT))
+    win = MainWindow(config, turret, dev_mode=True)
+    win.set_source_kind(SOURCE_SIM)
+    win.show()
+    assert wait_until(lambda: turret.is_connected)
+    win.overlay.snooze_ms = 80
+
+    win.power_off_btn.click()
+    assert wait_until(lambda: win.overlay.alert_kind == ALERT_POWER and win.overlay.beeping)
+    win.overlay.silence_btn.click()
+    assert win.overlay.isVisible() and win.overlay.alert_kind == ALERT_POWER and not win.overlay.beeping
+    assert wait_until(lambda: win.overlay.beeping, timeout=2)
+
+    win.overlay.snooze_ms = 80
+    win.overlay.hide_btn.click()
+    assert not win.overlay.isVisible() and not win.overlay.beeping
+    assert wait_until(lambda: win.overlay.isVisible() and win.overlay.beeping and win.overlay.alert_kind == ALERT_POWER, timeout=2)
+
+    win.overlay.snooze_ms = 30_000
+    win.overlay.hide_btn.click()
+    assert not win.overlay.isVisible()
+    win.power_on_btn.click()
+    assert wait_until(lambda: turret.is_connected and win.overlay.showing_restored)
+    win.power_off_btn.click()
+    assert wait_until(lambda: win.overlay.alert_kind == ALERT_POWER and win.overlay.beeping, timeout=2)
+    win.shutdown()
+    win.close()
+
+
+def test_higher_alert_shows_during_lower_snooze(qapp, config, turret, wait_until):
+    turret.open(PortIdentity(fake_turret.FAKE_PORT))
+    win = MainWindow(config, turret, dev_mode=True)
+    win.show()
+    win.overlay.snooze_ms = 30_000
+    win._qr_ok_at = time.monotonic() - QR_ALERT_AFTER_S - 1
+    win._sync_qr_alert()
+    assert win.overlay.alert_kind == ALERT_QR and win.overlay.isVisible()
+    win.overlay.hide_btn.click()
+    assert not win.overlay.isVisible()
+
+    win.power_off_btn.click()
+    assert wait_until(lambda: win.overlay.alert_kind == ALERT_POWER and win.overlay.isVisible() and win.overlay.beeping)
+    win.shutdown()
+    win.close()
+
+
+def test_disabled_alerts_skip_card_but_spoofing_still_manual(qapp, config, turret, wait_until):
+    config.alert_power = False
+    config.alert_qr_read = False
+    config.alert_spoofing = False
+    config.alert_sound = False
+    turret.open(PortIdentity(fake_turret.FAKE_PORT))
+    win = MainWindow(config, turret, dev_mode=True)
+    win.show()
+    win._qr_ok_at = time.monotonic() - 10
+    win._sync_qr_alert()
+    assert win.overlay.alert_kind is None
+
+    t = time.time()
+    win.qr_source.feed(GOOD, t)
+    assert wait_until(lambda: win.pill.text() == "TRACKING")
+    win.qr_source.feed(JAMMED, t + 0.2)
+    assert win.controller.mode is Mode.MANUAL
+    assert win.overlay.alert_kind is None
+
+    win.power_off_btn.click()
+    assert wait_until(lambda: not turret.is_connected)
+    assert not win.overlay.isVisible() and not win.overlay.beeping
+
+    win.config.alert_power = True
+    win.config.alert_sound = False
+    win._apply_alert_settings()
+    assert win.overlay.alert_kind == ALERT_POWER and win.overlay.isVisible() and not win.overlay.beeping
+    win.config.alert_sound = True
+    win._apply_alert_settings()
+    assert win.overlay.beeping
+    win.config.alert_power = False
+    win._apply_alert_settings()
+    assert win.overlay.alert_kind is None and not win.overlay.beeping
     win.shutdown()
     win.close()
 
@@ -501,6 +654,15 @@ def test_settings_groups_declination_crop_and_setup(qapp, config):
     buttons = [button.text() for button in dlg.findChildren(QPushButton)]
     assert any(text.startswith("Run setup again") for text in buttons)
     assert "Save" in buttons and "Cancel" in buttons
+    assert "ALERTS" in labels
+    checks = [box.text() for box in dlg.findChildren(QCheckBox)]
+    assert checks == [
+        "Alert when the tracker has no power",
+        "Alert when the QR read fails",
+        "Alert when spoofing is detected",
+        "Play the alarm sound",
+    ]
+    assert all(box.isChecked() for box in dlg.findChildren(QCheckBox))
 
 
 def test_position_update_sets_antenna_pose(qapp, config, turret):
